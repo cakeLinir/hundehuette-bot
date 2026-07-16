@@ -1,0 +1,71 @@
+{
+    "general": {
+        "error":   "❌ Error",
+        "success": "✅ Success",
+        "no_permission": "You don't have permission to use this command!"
+    },
+    "ping": {
+        "title":       "🐾 Pong!",
+        "bot_latency": "📡 Bot Latency",
+        "api_latency": "💻 API Latency"
+    },
+    "welcome": {
+        "title":       "🐾 A new member enters the Hundehütte!",
+        "description": "Welcome {user}, glad you're here!\n\nCheck out the rules and grab your roles.",
+        "field_member": "👤 Member",
+        "field_joined": "📅 Joined",
+        "field_total":  "👥 Members",
+        "field_total_value": "{count} total"
+    },
+    "ticket": {
+        "panel_title":       "🎫 Support Ticket",
+        "panel_description": "Do you have a problem or a question?\n\nClick the button to open a ticket.\nOur team will get back to you as soon as possible!\n\n> ⚠️ Please only open one ticket per issue.",
+        "btn_create":        "Create Ticket",
+        "btn_close":         "Close Ticket",
+        "created_title":     "🎫 Ticket opened!",
+        "created_desc":      "Hello {user}!\n\nPlease describe your issue in as much detail as possible.\nOur team will get back to you as soon as possible!\n\n> 📅 Created: {time}",
+        "success_created":   "Your ticket has been created!\n{channel}",
+        "closing":           "This channel will be deleted in **5 seconds**.",
+        "closing_title":     "🔒 Closing ticket...",
+        "already_open":      "You already have an open ticket!\n{channel}",
+        "not_a_ticket":      "This channel is not a ticket!",
+        "error_create":      "An error occurred while creating the ticket!"
+    },
+    "roles": {
+        "title":       "🎮 Choose your roles!",
+        "description": "Click a button to get a role.\nClicking again will **remove** the role.\n\n**Available Roles:**\n{rollen}",
+        "added":       "You received the role **{rolle}**!",
+        "removed":     "The role **{rolle}** has been removed.",
+        "not_found":   "This role no longer exists.\nPlease ask an admin to run `/config rollen-remove`.",
+        "added_title":   "✅ Role received!",
+        "removed_title": "🗑️ Role removed"
+    },
+    "automod": {
+        "word_removed":    "{user}, your message contained a banned word.",
+        "link_removed":    "{user}, sending links is not allowed here.",
+        "spam_detected":   "{user}, please don't send the same message multiple times!",
+        "removed_title":   "⚠️ Message removed",
+        "link_title":      "⚠️ Link removed",
+        "spam_title":      "⚠️ Spam detected"
+    },
+    "feedback": {
+        "no_channel":      "No feedback channel configured!\nPlease ask an admin to run `/config feedback-kanal`.",
+        "sent_title":      "✅ Feedback sent!",
+        "sent_desc":       "Your feedback was {anonym}successfully forwarded to the team!",
+        "anonym_prefix":   "anonymously ",
+        "anonym_user":     "🕵️ Anonymous User",
+        "improvement":     "💡 Suggestion for improvement",
+        "details":         "📊 Details"
+    },
+    "config": {
+        "welcome_set":      "Welcome channel has been set to {channel}!",
+        "feedback_set":     "Feedback channel has been set to {channel}!",
+        "automod_set":      "Auto Mod has been **{status}**!",
+        "automod_on":       "enabled ✅",
+        "automod_off":      "disabled ❌",
+        "lang_set":         "Language has been set to **{lang}**!",
+        "overview_title":   "⚙️ Current Configuration",
+        "not_set":          "❌ Not set",
+        "no_buttons":       "❌ No buttons configured"
+    }
+}

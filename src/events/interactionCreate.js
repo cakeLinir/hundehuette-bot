@@ -344,6 +344,38 @@ module.exports = {
                     )],
                 });
 
+                // ── Transcript erstellen ──
+                try {
+                    const { createTranscript } = require('../utils/transcript');
+                    const transcriptKanal = settings.transcriptChannelId
+                        ? interaction.guild.channels.cache.get(settings.transcriptChannelId)
+                        : null;
+
+                    if (transcriptKanal) {
+                        const attachment = await createTranscript(interaction.channel);
+                        const ticketInfo = tickets[interaction.channel.id];
+                        const ersteller = await interaction.guild.members.fetch(ticketInfo.userId).catch(() => null);
+
+                        await transcriptKanal.send({
+                            embeds: [createEmbed(
+                                'info',
+                                '📄 Ticket Transcript',
+                                [
+                                    `**Kanal:** #${interaction.channel.name}`,
+                                    `**Ersteller:** ${ersteller?.user.tag ?? 'Unbekannt'}`,
+                                    `**Geschlossen von:** ${interaction.user.tag}`,
+                                    `**Geschlossen am:** <t:${Math.floor(Date.now() / 1000)}:F>`,
+                                ].join('\n')
+                            )],
+                            files: [attachment],
+                        });
+
+                        logger.ticket('Transcript erstellt', interaction.channel.name);
+                    }
+                } catch (error) {
+                    logger.error('Fehler beim Transcript erstellen', error);
+                }
+
                 delete tickets[interaction.channel.id];
                 setGuildSettings(guildId, { tickets });
 

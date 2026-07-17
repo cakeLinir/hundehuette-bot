@@ -39,7 +39,38 @@ module.exports = {
         .addSubcommand(sub => sub
             .setName('close')
             .setDescription('Schließt das aktuelle Ticket')
+        )
+
+        .addSubcommand(sub => sub
+            .setName('add')
+            .setDescription('Fügt einen Nutzer zum aktuellen Ticket hinzu')
+            .addUserOption(opt => opt
+                .setName('user')
+                .setDescription('Der Nutzer der hinzugefügt werden soll')
+                .setRequired(true)
+            )
+        )
+
+        .addSubcommand(sub => sub
+            .setName('remove')
+            .setDescription('Entfernt einen Nutzer aus dem aktuellen Ticket')
+            .addUserOption(opt => opt
+                .setName('user')
+                .setDescription('Der Nutzer der entfernt werden soll')
+                .setRequired(true)
+            )
+        )
+
+        .addSubcommand(sub => sub
+            .setName('transcript-kanal')
+            .setDescription('Setzt den Kanal in dem Transcripts gespeichert werden')
+            .addChannelOption(opt => opt
+                .setName('kanal')
+                .setDescription('Kanal für Ticket-Transcripts')
+                .setRequired(true)
+            )
         ),
+
 
     async execute(interaction, client) {
         if (!isModuleEnabled(interaction.guild.id, 'tickets')) {
@@ -50,6 +81,7 @@ module.exports = {
         }
         const sub = interaction.options.getSubcommand();
         const guildId = interaction.guild.id;
+        const settings = getGuildSettings(guildId);
 
         // ── Setup ────────────────────────────────────────────────
         if (sub === 'setup') {
@@ -137,5 +169,67 @@ module.exports = {
                 await interaction.channel.delete().catch(() => { });
             }, 5000);
         }
+        // ── Add User zum Ticket ───────────────────────────────────
+        if (sub === 'add') {
+            const tickets = settings.tickets ?? {};
+
+            if (!tickets[interaction.channel.id]) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Dieser Kanal ist kein Ticket!')],
+                    ephemeral: true,
+                });
+            }
+
+            const user = interaction.options.getUser('user');
+
+            await interaction.channel.permissionOverwrites.create(user.id, {
+                ViewChannel: true,
+                SendMessages: true,
+                ReadMessageHistory: true,
+            });
+
+            return interaction.reply({
+                embeds: [createSuccessEmbed(
+                    `${user} wurde zum Ticket hinzugefügt und kann nun den Verlauf sehen sowie schreiben.`
+                )],
+            });
+        }
+
+        // ── Remove User vom Ticket ────────────────────────────────
+        if (sub === 'remove') {
+            const tickets = settings.tickets ?? {};
+
+            if (!tickets[interaction.channel.id]) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Dieser Kanal ist kein Ticket!')],
+                    ephemeral: true,
+                });
+            }
+
+            const user = interaction.options.getUser('user');
+
+            await interaction.channel.permissionOverwrites.delete(user.id);
+
+            return interaction.reply({
+                embeds: [createSuccessEmbed(
+                    `${user} wurde aus dem Ticket entfernt und hat keinen Zugriff mehr.`
+                )],
+            });
+        }
+
+        // ── Transcript Kanal setzen ────────────────────────────────
+        if (sub === 'transcript-kanal') {
+            const kanal = interaction.options.getChannel('kanal');
+
+            setGuildSettings(guildId, { transcriptChannelId: kanal.id });
+
+            return interaction.reply({
+                embeds: [createSuccessEmbed(
+                    `Transcript-Kanal wurde auf <#${kanal.id}> gesetzt!`
+                )],
+                ephemeral: true,
+            });
+        }
+
     }
 };

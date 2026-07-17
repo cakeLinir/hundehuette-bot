@@ -7,11 +7,18 @@ const settingsPath = path.join(__dirname, '..', '..', 'data', 'guildSettings.jso
  *  Lädt alle gespeicherten Guild-Settings
  */
 function loadSettings() {
+    // Ordner erstellen falls er nicht existiert
+    const dataDir = path.join(__dirname, '..', '..', 'data');
+    if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+    }
+
     if (!fs.existsSync(settingsPath)) {
         fs.writeFileSync(settingsPath, JSON.stringify({}, null, 2));
     }
     return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
 }
+
 
 /**
  * Speichert die Guild-Settings

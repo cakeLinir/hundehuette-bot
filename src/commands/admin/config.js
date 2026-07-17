@@ -151,6 +151,32 @@ module.exports = {
                     { name: '🇬🇧 English', value: 'en' }
                 )
             )
+        )
+        // ── Twitch Kanal setzen ──
+        .addSubcommand(sub => sub
+            .setName('twitch-channel')
+            .setDescription('Setzt den zu überwachenden Twitch-Kanal')
+            .addStringOption(opt => opt
+                .setName('username')
+                .setDescription('Twitch Benutzername (klein geschrieben)')
+                .setRequired(true)
+            )
+        )
+
+        // ── Twitch Benachrichtigungs-Kanal ──
+        .addSubcommand(sub => sub
+            .setName('twitch-notify')
+            .setDescription('Setzt den Kanal für Live-Benachrichtigungen')
+            .addChannelOption(opt => opt
+                .setName('kanal')
+                .setDescription('Kanal für Live-Ankündigungen')
+                .setRequired(true)
+            )
+            .addRoleOption(opt => opt
+                .setName('rolle')
+                .setDescription('Rolle die bei Live-Gang gepingt wird (optional)')
+                .setRequired(false)
+            )
         ),
 
     async execute(interaction) {
@@ -423,5 +449,42 @@ module.exports = {
                 ephemeral: true,
             });
         }
+        // ── Twitch Channel ───────────────────────────────────────
+        if (sub === 'twitch-channel') {
+            const username = interaction.options.getString('username').toLowerCase();
+            const twitch = settings.twitch ?? {};
+
+            twitch.username = username;
+            setGuildSettings(guildId, { twitch });
+
+            return interaction.reply({
+                embeds: [createSuccessEmbed(
+                    `Twitch-Kanal wurde auf **${username}** gesetzt!\n` +
+                    `Nicht vergessen: Setze auch den Benachrichtigungs-Kanal mit \`/config twitch-notify\`.`
+                )],
+                ephemeral: true,
+            });
+        }
+
+        // ── Twitch Notify ────────────────────────────────────────
+        if (sub === 'twitch-notify') {
+            const kanal = interaction.options.getChannel('kanal');
+            const rolle = interaction.options.getRole('rolle');
+            const twitch = settings.twitch ?? {};
+
+            twitch.notifyChannelId = kanal.id;
+            if (rolle) twitch.roleId = rolle.id;
+
+            setGuildSettings(guildId, { twitch });
+
+            return interaction.reply({
+                embeds: [createSuccessEmbed(
+                    `Twitch Benachrichtigungs-Kanal wurde auf <#${kanal.id}> gesetzt!` +
+                    (rolle ? `\nPing-Rolle: ${rolle}` : '')
+                )],
+                ephemeral: true,
+            });
+        }
+
     }
 };

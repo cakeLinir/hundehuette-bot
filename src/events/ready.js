@@ -1,3 +1,4 @@
+const { startTwitchWatcher } = require('../utils/twitchWatcher');
 const logger = require('../utils/logger');
 module.exports = {
     name: 'clientReady',
@@ -10,5 +11,6 @@ module.exports = {
             activities: [{ name: '🐾 hundekuchenlive | /help' }],
             status: 'online',
         });
+        startTwitchWatcher(client);
     }
 }

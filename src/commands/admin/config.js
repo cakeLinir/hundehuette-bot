@@ -4,6 +4,7 @@ const {
 } = require('discord.js');
 const { getGuildSettings, setGuildSettings } = require('../../utils/settingsManager');
 const { createEmbed, createErrorEmbed, createSuccessEmbed } = require('../../utils/embedBuilder');
+const { t, getLang } = require('../../utils/i18n');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -256,7 +257,6 @@ module.exports = {
 
         // ── Anzeigen ─────────────────────────────────────────────
         if (sub === 'anzeigen') {
-            const { getLang } = require('../../utils/i18n');
 
             const welcomeKanal = settings.welcomeChannelId
                 ? `<#${settings.welcomeChannelId}>`

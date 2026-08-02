@@ -4,7 +4,7 @@ const {
     REST,
     Routes,
 } = require('discord.js');
-const fs   = require('fs');
+const fs = require('fs');
 const path = require('path');
 const { createEmbed, createErrorEmbed, createSuccessEmbed } = require('../../utils/embedBuilder');
 
@@ -29,19 +29,17 @@ module.exports = {
 
         // ── Sync ─────────────────────────────────────────────────
         if (sub === 'sync') {
-
-            // Abgelaufene Interactions abfangen
             try {
                 await interaction.deferReply({ ephemeral: true });
             } catch (_) {
-                console.warn('⚠️  Sync wurde ausgeführt aber Interaction war bereits abgelaufen.');
+                console.warn('⚠️  Sync Interaction abgelaufen.');
                 return;
             }
 
             try {
-                const commands     = [];
+                const commands = [];
                 const commandsPath = path.join(__dirname, '..', '..', 'commands');
-                const categories   = fs.readdirSync(commandsPath);
+                const categories = fs.readdirSync(commandsPath);
 
                 for (const category of categories) {
                     const categoryPath = path.join(commandsPath, category);
@@ -52,7 +50,6 @@ module.exports = {
                     for (const file of files) {
                         const filePath = path.join(categoryPath, file);
                         delete require.cache[require.resolve(filePath)];
-
                         const command = require(filePath);
                         if (command.data) commands.push(command.data.toJSON());
                     }
@@ -60,17 +57,14 @@ module.exports = {
 
                 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
-                await rest.put(
-                    Routes.applicationCommands(process.env.CLIENT_ID),
-                    { body: [] }
-                );
-
+                // WICHTIG: Erst neu registrieren, DANN erst löschen
+                // So gehen bei einem Fehler keine Commands verloren
                 await rest.put(
                     Routes.applicationCommands(process.env.CLIENT_ID),
                     { body: commands }
                 );
 
-                console.log(`🔄 Sync ausgeführt von ${interaction.user.tag} — ${commands.length} Befehl(e) registriert`);
+                logger.info(`Sync ausgeführt von ${interaction.user.tag} — ${commands.length} Befehl(e) registriert`);
 
                 await interaction.editReply({
                     embeds: [createEmbed(
@@ -82,28 +76,29 @@ module.exports = {
                 });
 
             } catch (error) {
-                console.error('❌ Fehler beim Sync:', error);
+                logger.error('Fehler beim Sync', error);
 
                 await interaction.editReply({
                     embeds: [createErrorEmbed(
                         `Sync fehlgeschlagen!\n\`\`\`${error.message}\`\`\``
                     )],
-                }).catch(() => {});
+                }).catch(() => { });
             }
         }
+
 
 
         // ── Status ───────────────────────────────────────────────
         if (sub === 'status') {
             try {
-                const uptime    = process.uptime();
-                const stunden   = Math.floor(uptime / 3600);
-                const minuten   = Math.floor((uptime % 3600) / 60);
-                const sekunden  = Math.floor(uptime % 60);
+                const uptime = process.uptime();
+                const stunden = Math.floor(uptime / 3600);
+                const minuten = Math.floor((uptime % 3600) / 60);
+                const sekunden = Math.floor(uptime % 60);
                 const uptimeStr = `${stunden}h ${minuten}m ${sekunden}s`;
 
                 const memUsage = process.memoryUsage();
-                const memMB    = (memUsage.heapUsed / 1024 / 1024).toFixed(2);
+                const memMB = (memUsage.heapUsed / 1024 / 1024).toFixed(2);
 
                 await interaction.reply({
                     embeds: [createEmbed('info', '📊 Bot Status', [

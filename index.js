@@ -4,6 +4,9 @@ const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const { loadCommands } = require('./src/handler/commandHandler');
 const { loadEvents } = require('./src/handler/eventHandler');
 const logger = require('./src/utils/logger');
+const { startServer } = require('./src/server/index');
+const { setClient } = require('./src/server/twitchEvents');
+
 
 // Bot Client erstellen mit den benötigten Intents
 const client = new Client({
@@ -33,3 +36,9 @@ process.on('unhandledRejection', error => {
 
 // Bot einloggen
 client.login(process.env.TOKEN);
+
+// Nach client.login():
+client.once('clientReady', () => {
+    setClient(client);
+    startServer(client);
+});

@@ -69,6 +69,26 @@ module.exports = {
                 .setDescription('Kanal für Ticket-Transcripts')
                 .setRequired(true)
             )
+        )
+
+        .addSubcommand(sub => sub
+            .setName('add')
+            .setDescription('Fügt einen Nutzer zum aktuellen Ticket hinzu')
+            .addUserOption(opt => opt
+                .setName('nutzer')
+                .setDescription('Der Nutzer der Zugriff erhalten soll')
+                .setRequired(true)
+            )
+        )
+
+        .addSubcommand(sub => sub
+            .setName('remove')
+            .setDescription('Entfernt einen Nutzer aus dem aktuellen Ticket')
+            .addUserOption(opt => opt
+                .setName('nutzer')
+                .setDescription('Der Nutzer dessen Zugriff entfernt werden soll')
+                .setRequired(true)
+            )
         ),
 
 
@@ -230,6 +250,69 @@ module.exports = {
                 ephemeral: true,
             });
         }
+
+        // ── Nutzer hinzufügen ────────────────────────────────────
+        if (sub === 'add') {
+            const settings = getGuildSettings(interaction.guild.id);
+            const tickets = settings.tickets ?? {};
+
+            if (!tickets[interaction.channel.id]) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Dieser Kanal ist kein Ticket!')],
+                    ephemeral: true,
+                });
+            }
+
+            const nutzer = interaction.options.getUser('nutzer');
+
+            await interaction.channel.permissionOverwrites.create(nutzer.id, {
+                ViewChannel: true,
+                SendMessages: true,
+                ReadMessageHistory: true,
+            });
+
+            return interaction.reply({
+                embeds: [createSuccessEmbed(
+                    `${nutzer} wurde zum Ticket hinzugefügt und kann nun mitlesen & schreiben.`
+                )],
+            });
+        }
+
+        // ── Nutzer entfernen ─────────────────────────────────────
+        if (sub === 'remove') {
+            const settings = getGuildSettings(interaction.guild.id);
+            const tickets = settings.tickets ?? {};
+
+            if (!tickets[interaction.channel.id]) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Dieser Kanal ist kein Ticket!')],
+                    ephemeral: true,
+                });
+            }
+
+            const nutzer = interaction.options.getUser('nutzer');
+
+            // Ticket-Ersteller kann nicht entfernt werden
+            if (tickets[interaction.channel.id].userId === nutzer.id) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed(
+                        'Der Ersteller des Tickets kann nicht entfernt werden!'
+                    )],
+                    ephemeral: true,
+                });
+            }
+
+            await interaction.channel.permissionOverwrites.delete(nutzer.id);
+
+            return interaction.reply({
+                embeds: [createEmbed(
+                    'warning',
+                    '🚫 Zugriff entfernt',
+                    `${nutzer} hat keinen Zugriff mehr auf dieses Ticket.`
+                )],
+            });
+        }
+
 
     }
 };

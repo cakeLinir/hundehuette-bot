@@ -177,6 +177,16 @@ module.exports = {
                 .setDescription('Rolle die bei Live-Gang gepingt wird (optional)')
                 .setRequired(false)
             )
+        )
+
+        .addSubcommand(sub => sub
+            .setName('transcript-kanal')
+            .setDescription('Setzt den Kanal für Ticket-Transcripts')
+            .addChannelOption(opt => opt
+                .setName('kanal')
+                .setDescription('Der Kanal für geschlossene Ticket-Protokolle')
+                .setRequired(true)
+            )
         ),
 
     async execute(interaction) {
@@ -485,6 +495,20 @@ module.exports = {
                 ephemeral: true,
             });
         }
+
+        // ── Transcript Channel ────────────────────────────────────────
+        if (sub === 'transcript-kanal') {
+            const kanal = interaction.options.getChannel('kanal');
+            setGuildSettings(guildId, { transcriptChannelId: kanal.id });
+
+            return interaction.reply({
+                embeds: [createSuccessEmbed(
+                    `Transcript-Kanal wurde auf <#${kanal.id}> gesetzt!`
+                )],
+                ephemeral: true,
+            });
+        }
+
 
     }
 };

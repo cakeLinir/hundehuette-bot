@@ -326,55 +326,53 @@ module.exports = {
 
             // ── Ticket schließen ────────────────────────────────
             else if (interaction.customId === 'ticket_close_btn') {
+                await interaction.deferReply();
+
                 const settings = getGuildSettings(guildId);
                 const tickets = settings.tickets ?? {};
 
                 if (!tickets[interaction.channel.id]) {
-                    return interaction.reply({
+                    return interaction.editReply({
                         embeds: [createErrorEmbed(t(guildId, 'ticket.not_a_ticket'))],
-                        ephemeral: true,
                     });
                 }
 
-                await interaction.reply({
+                // Transcript erstellen
+                const { createTranscript } = require('../utils/transcript');
+                const transcriptDatei = await createTranscript(interaction.channel);
+
+                // Transcript in Log-Kanal posten
+                const transcriptKanal = settings.transcriptChannelId
+                    ? interaction.guild.channels.cache.get(settings.transcriptChannelId)
+                    : null;
+
+                if (transcriptKanal) {
+                    const ticketInfo = tickets[interaction.channel.id];
+                    const ersteller = await interaction.guild.members.fetch(ticketInfo.userId).catch(() => null);
+
+                    await transcriptKanal.send({
+                        embeds: [createEmbed(
+                            'info',
+                            '🎫 Ticket geschlossen',
+                            [
+                                `**Ersteller:** ${ersteller?.user.tag ?? 'Unbekannt'}`,
+                                `**Geschlossen von:** ${interaction.user.tag}`,
+                                `**Erstellt am:** <t:${Math.floor(ticketInfo.createdAt / 1000)}:F>`,
+                                `**Geschlossen am:** <t:${Math.floor(Date.now() / 1000)}:F>`,
+                            ].join('\n')
+                        )],
+                        files: [transcriptDatei],
+                    });
+                }
+
+                await interaction.editReply({
                     embeds: [createEmbed(
                         'warning',
                         t(guildId, 'ticket.closing_title'),
-                        t(guildId, 'ticket.closing')
+                        t(guildId, 'ticket.closing') +
+                        (transcriptKanal ? '\n\n📄 Transcript wurde gespeichert.' : '')
                     )],
                 });
-
-                // ── Transcript erstellen ──
-                try {
-                    const { createTranscript } = require('../utils/transcript');
-                    const transcriptKanal = settings.transcriptChannelId
-                        ? interaction.guild.channels.cache.get(settings.transcriptChannelId)
-                        : null;
-
-                    if (transcriptKanal) {
-                        const attachment = await createTranscript(interaction.channel);
-                        const ticketInfo = tickets[interaction.channel.id];
-                        const ersteller = await interaction.guild.members.fetch(ticketInfo.userId).catch(() => null);
-
-                        await transcriptKanal.send({
-                            embeds: [createEmbed(
-                                'info',
-                                '📄 Ticket Transcript',
-                                [
-                                    `**Kanal:** #${interaction.channel.name}`,
-                                    `**Ersteller:** ${ersteller?.user.tag ?? 'Unbekannt'}`,
-                                    `**Geschlossen von:** ${interaction.user.tag}`,
-                                    `**Geschlossen am:** <t:${Math.floor(Date.now() / 1000)}:F>`,
-                                ].join('\n')
-                            )],
-                            files: [attachment],
-                        });
-
-                        logger.ticket('Transcript erstellt', interaction.channel.name);
-                    }
-                } catch (error) {
-                    logger.error('Fehler beim Transcript erstellen', error);
-                }
 
                 delete tickets[interaction.channel.id];
                 setGuildSettings(guildId, { tickets });
@@ -386,6 +384,7 @@ module.exports = {
                 }, 5000);
                 return;
             }
+
 
             // ── Ankündigung — Weiter Button ─────────────────────
             else if (interaction.customId === 'ankuendigung_weiter') {

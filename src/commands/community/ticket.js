@@ -7,7 +7,7 @@ const {
 } = require('discord.js');
 const { createEmbed, createErrorEmbed, createSuccessEmbed } = require('../../utils/embedBuilder');
 const { getGuildSettings, setGuildSettings } = require('../../utils/settingsManager');
-const { t } = require('../../utils/i18n')
+const { t } = require('../../utils/i18n');
 const { isModuleEnabled } = require('../../utils/moduleManager');
 
 module.exports = {
@@ -37,31 +37,6 @@ module.exports = {
         )
 
         .addSubcommand(sub => sub
-            .setName('close')
-            .setDescription('Schließt das aktuelle Ticket')
-        )
-
-        .addSubcommand(sub => sub
-            .setName('add')
-            .setDescription('Fügt einen Nutzer zum aktuellen Ticket hinzu')
-            .addUserOption(opt => opt
-                .setName('user')
-                .setDescription('Der Nutzer der hinzugefügt werden soll')
-                .setRequired(true)
-            )
-        )
-
-        .addSubcommand(sub => sub
-            .setName('remove')
-            .setDescription('Entfernt einen Nutzer aus dem aktuellen Ticket')
-            .addUserOption(opt => opt
-                .setName('user')
-                .setDescription('Der Nutzer der entfernt werden soll')
-                .setRequired(true)
-            )
-        )
-
-        .addSubcommand(sub => sub
             .setName('transcript-kanal')
             .setDescription('Setzt den Kanal in dem Transcripts gespeichert werden')
             .addChannelOption(opt => opt
@@ -72,7 +47,12 @@ module.exports = {
         )
 
         .addSubcommand(sub => sub
-            .setName('add')
+            .setName('close')
+            .setDescription('Schließt das aktuelle Ticket')
+        )
+
+        .addSubcommand(sub => sub
+            .setName('user-add')
             .setDescription('Fügt einen Nutzer zum aktuellen Ticket hinzu')
             .addUserOption(opt => opt
                 .setName('nutzer')
@@ -82,7 +62,7 @@ module.exports = {
         )
 
         .addSubcommand(sub => sub
-            .setName('remove')
+            .setName('user-remove')
             .setDescription('Entfernt einen Nutzer aus dem aktuellen Ticket')
             .addUserOption(opt => opt
                 .setName('nutzer')
@@ -91,17 +71,17 @@ module.exports = {
             )
         ),
 
+    async execute(interaction) {
+        const guildId = interaction.guild.id;
+        const settings = getGuildSettings(guildId);
+        const sub = interaction.options.getSubcommand();
 
-    async execute(interaction, client) {
-        if (!isModuleEnabled(interaction.guild.id, 'tickets')) {
+        if (!isModuleEnabled(guildId, 'tickets')) {
             return interaction.reply({
                 embeds: [createErrorEmbed('Das Ticket-Modul ist auf diesem Server deaktiviert!')],
                 ephemeral: true,
             });
         }
-        const sub = interaction.options.getSubcommand();
-        const guildId = interaction.guild.id;
-        const settings = getGuildSettings(guildId);
 
         // ── Setup ────────────────────────────────────────────────
         if (sub === 'setup') {
@@ -109,11 +89,6 @@ module.exports = {
 
             const embed = createEmbed(
                 'info',
-                '🎫 Support Ticket',
-                'Hast du ein Problem oder eine Frage?\n\n' +
-                'Klicke auf den Button um ein Ticket zu öffnen.\n' +
-                'Unser Team wird sich so schnell wie möglich bei dir melden!\n\n' +
-                '> ⚠️ Bitte nur ein Ticket pro Anliegen öffnen.',
                 t(guildId, 'ticket.panel_title'),
                 t(guildId, 'ticket.panel_description')
             );
@@ -151,7 +126,7 @@ module.exports = {
                 });
             }
 
-            setGuildSettings(interaction.guild.id, { ticketCategoryId: kategorieId });
+            setGuildSettings(guildId, { ticketCategoryId: kategorieId });
 
             return interaction.reply({
                 embeds: [createSuccessEmbed(
@@ -161,83 +136,7 @@ module.exports = {
             });
         }
 
-        // ── Close ────────────────────────────────────────────────
-        if (sub === 'close') {
-            const tickets = settings.tickets ?? {};
-
-            // Prüfen ob dieser Kanal ein Ticket ist
-            if (!tickets[interaction.channel.id]) {
-                return interaction.reply({
-                    embeds: [createErrorEmbed('Dieser Kanal ist kein Ticket!')],
-                    ephemeral: true,
-                });
-            }
-
-            await interaction.reply({
-                embeds: [createEmbed(
-                    'warning',
-                    '🔒 Ticket wird geschlossen...',
-                    'Dieser Kanal wird in **5 Sekunden** gelöscht.'
-                )],
-            });
-
-            // Ticket aus Settings entfernen
-            delete tickets[interaction.channel.id];
-            setGuildSettings(interaction.guild.id, { tickets });
-
-            setTimeout(async () => {
-                await interaction.channel.delete().catch(() => { });
-            }, 5000);
-        }
-        // ── Add User zum Ticket ───────────────────────────────────
-        if (sub === 'add') {
-            const tickets = settings.tickets ?? {};
-
-            if (!tickets[interaction.channel.id]) {
-                return interaction.reply({
-                    embeds: [createErrorEmbed('Dieser Kanal ist kein Ticket!')],
-                    ephemeral: true,
-                });
-            }
-
-            const user = interaction.options.getUser('user');
-
-            await interaction.channel.permissionOverwrites.create(user.id, {
-                ViewChannel: true,
-                SendMessages: true,
-                ReadMessageHistory: true,
-            });
-
-            return interaction.reply({
-                embeds: [createSuccessEmbed(
-                    `${user} wurde zum Ticket hinzugefügt und kann nun den Verlauf sehen sowie schreiben.`
-                )],
-            });
-        }
-
-        // ── Remove User vom Ticket ────────────────────────────────
-        if (sub === 'remove') {
-            const tickets = settings.tickets ?? {};
-
-            if (!tickets[interaction.channel.id]) {
-                return interaction.reply({
-                    embeds: [createErrorEmbed('Dieser Kanal ist kein Ticket!')],
-                    ephemeral: true,
-                });
-            }
-
-            const user = interaction.options.getUser('user');
-
-            await interaction.channel.permissionOverwrites.delete(user.id);
-
-            return interaction.reply({
-                embeds: [createSuccessEmbed(
-                    `${user} wurde aus dem Ticket entfernt und hat keinen Zugriff mehr.`
-                )],
-            });
-        }
-
-        // ── Transcript Kanal setzen ────────────────────────────────
+        // ── Transcript Kanal ─────────────────────────────────────
         if (sub === 'transcript-kanal') {
             const kanal = interaction.options.getChannel('kanal');
 
@@ -251,9 +150,36 @@ module.exports = {
             });
         }
 
-        // ── Nutzer hinzufügen ────────────────────────────────────
-        if (sub === 'add') {
-            const settings = getGuildSettings(interaction.guild.id);
+        // ── Close ────────────────────────────────────────────────
+        if (sub === 'close') {
+            const tickets = settings.tickets ?? {};
+
+            if (!tickets[interaction.channel.id]) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed(t(guildId, 'ticket.not_a_ticket'))],
+                    ephemeral: true,
+                });
+            }
+
+            await interaction.reply({
+                embeds: [createEmbed(
+                    'warning',
+                    t(guildId, 'ticket.closing_title'),
+                    t(guildId, 'ticket.closing')
+                )],
+            });
+
+            delete tickets[interaction.channel.id];
+            setGuildSettings(guildId, { tickets });
+
+            setTimeout(async () => {
+                await interaction.channel.delete().catch(() => { });
+            }, 5000);
+            return;
+        }
+
+        // ── User Add ─────────────────────────────────────────────
+        if (sub === 'user-add') {
             const tickets = settings.tickets ?? {};
 
             if (!tickets[interaction.channel.id]) {
@@ -278,9 +204,8 @@ module.exports = {
             });
         }
 
-        // ── Nutzer entfernen ─────────────────────────────────────
-        if (sub === 'remove') {
-            const settings = getGuildSettings(interaction.guild.id);
+        // ── User Remove ──────────────────────────────────────────
+        if (sub === 'user-remove') {
             const tickets = settings.tickets ?? {};
 
             if (!tickets[interaction.channel.id]) {
@@ -292,7 +217,6 @@ module.exports = {
 
             const nutzer = interaction.options.getUser('nutzer');
 
-            // Ticket-Ersteller kann nicht entfernt werden
             if (tickets[interaction.channel.id].userId === nutzer.id) {
                 return interaction.reply({
                     embeds: [createErrorEmbed(
@@ -312,7 +236,5 @@ module.exports = {
                 )],
             });
         }
-
-
     }
 };

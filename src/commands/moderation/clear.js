@@ -28,13 +28,13 @@ module.exports = {
         if (!isModuleEnabled(interaction.guild.id, 'moderation')) {
             return interaction.reply({
                 embeds: [createErrorEmbed('Das Moderations-Modul ist auf diesem Server deaktiviert!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
         const anzahl = interaction.options.getInteger('anzahl');
         const mitglied = interaction.options.getUser('mitglied');
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 }); // Ephemeral + Suppress Embeds
 
         try {
             // Nachrichten holen
@@ -51,6 +51,7 @@ module.exports = {
             if (nachrichten.length === 0) {
                 return interaction.editReply({
                     embeds: [createErrorEmbed('Keine Nachrichten zum Löschen gefunden!')],
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -65,6 +66,7 @@ module.exports = {
                     `**${nachrichten.length}** Nachricht(en) wurden gelöscht.\n` +
                     (mitglied ? `**Filter:** Nachrichten von ${mitglied.tag}` : '')
                 )],
+                flags: 64, // Ephemeral + Suppress Embeds
             });
 
         } catch (error) {
@@ -74,6 +76,7 @@ module.exports = {
                     'Fehler beim Löschen!\n' +
                     '> Nachrichten die älter als **14 Tage** sind können nicht gelöscht werden.'
                 )],
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
     }

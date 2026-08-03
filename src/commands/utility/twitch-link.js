@@ -26,7 +26,7 @@ module.exports = {
                     `Dein Account ist bereits mit **${bereitsLinked.twitchName}** verknüpft.\n\n` +
                     `Möchtest du die Verknüpfung aufheben? Nutze \`/twitch-unlink\`.`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -71,7 +71,7 @@ module.exports = {
                     }]
                 }
             ],
-            ephemeral: true,
+            flags: 64, // Ephemeral + Suppress Embeds
         });
     }
 };

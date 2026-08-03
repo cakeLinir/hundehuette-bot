@@ -79,7 +79,7 @@ module.exports = {
         if (!isModuleEnabled(guildId, 'tickets')) {
             return interaction.reply({
                 embeds: [createErrorEmbed('Das Ticket-Modul ist auf diesem Server deaktiviert!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -107,7 +107,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `Ticket-Nachricht wurde in <#${kanal.id}> gepostet!`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -122,7 +122,7 @@ module.exports = {
                         'Ungültige Kategorie-ID!\n' +
                         'Rechtsklick auf eine Kategorie → "ID kopieren"'
                     )],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -132,7 +132,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `Ticket-Kategorie wurde auf **${kategorie.name}** gesetzt!`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -146,7 +146,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `Transcript-Kanal wurde auf <#${kanal.id}> gesetzt!`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -157,7 +157,7 @@ module.exports = {
             if (!tickets[interaction.channel.id]) {
                 return interaction.reply({
                     embeds: [createErrorEmbed(t(guildId, 'ticket.not_a_ticket'))],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -167,6 +167,7 @@ module.exports = {
                     t(guildId, 'ticket.closing_title'),
                     t(guildId, 'ticket.closing')
                 )],
+                flags: 64, // Ephemeral + Suppress Embeds
             });
 
             delete tickets[interaction.channel.id];
@@ -185,7 +186,7 @@ module.exports = {
             if (!tickets[interaction.channel.id]) {
                 return interaction.reply({
                     embeds: [createErrorEmbed('Dieser Kanal ist kein Ticket!')],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -201,6 +202,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `${nutzer} wurde zum Ticket hinzugefügt und kann nun mitlesen & schreiben.`
                 )],
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -211,7 +213,7 @@ module.exports = {
             if (!tickets[interaction.channel.id]) {
                 return interaction.reply({
                     embeds: [createErrorEmbed('Dieser Kanal ist kein Ticket!')],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -222,7 +224,7 @@ module.exports = {
                     embeds: [createErrorEmbed(
                         'Der Ersteller des Tickets kann nicht entfernt werden!'
                     )],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -234,6 +236,7 @@ module.exports = {
                     '🚫 Zugriff entfernt',
                     `${nutzer} hat keinen Zugriff mehr auf dieses Ticket.`
                 )],
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
     }

@@ -19,7 +19,7 @@ module.exports = {
         if (!isModuleEnabled(interaction.guild.id, 'feedback')) {
             return interaction.reply({
                 embeds: [createErrorEmbed('Das Feedback-Modul ist auf diesem Server deaktiviert!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -30,7 +30,7 @@ module.exports = {
                     'Kein Feedback-Kanal konfiguriert!\n' +
                     'Bitte einen Admin `/config feedback-kanal` auszuführen.'
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -108,7 +108,7 @@ module.exports = {
                 new ActionRowBuilder().addComponents(kategorieMenu),
                 new ActionRowBuilder().addComponents(weiterButton),
             ],
-            ephemeral: true,
+            flags: 64, // Ephemeral + Suppress Embeds
         });
 
     }

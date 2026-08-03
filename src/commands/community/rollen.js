@@ -23,7 +23,7 @@ module.exports = {
         if (!isModuleEnabled(guildId, 'roles')) {
             return interaction.reply({
                 embeds: [createErrorEmbed('Das Rollen-Modul ist auf diesem Server deaktiviert!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -33,7 +33,7 @@ module.exports = {
                     'Keine Rollen-Buttons konfiguriert!\n' +
                     'Füge zuerst Buttons hinzu mit `/config rollen-add`.'
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -62,7 +62,7 @@ module.exports = {
 
         await interaction.reply({
             embeds: [createEmbed('success', '✅ Fertig!', 'Die Rollen-Nachricht wurde gepostet.')],
-            ephemeral: true,
+            flags: 64, // Ephemeral + Suppress Embeds
         });
     }
 };

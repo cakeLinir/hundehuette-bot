@@ -43,7 +43,7 @@ module.exports = {
                     `Der Command \`${name}\` existiert nicht!\n` +
                     `Alle Commands ansehen mit \`/custom list\`.`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 

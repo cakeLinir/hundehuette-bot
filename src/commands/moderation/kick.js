@@ -26,7 +26,7 @@ module.exports = {
         if (!isModuleEnabled(interaction.guild.id, 'moderation')) {
             return interaction.reply({
                 embeds: [createErrorEmbed('Das Moderations-Modul ist auf diesem Server deaktiviert!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
         const ziel = interaction.options.getMember('mitglied');
@@ -36,7 +36,7 @@ module.exports = {
         if (!ziel) {
             return interaction.reply({
                 embeds: [createErrorEmbed('Dieses Mitglied wurde nicht gefunden!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -46,14 +46,14 @@ module.exports = {
                     'Ich kann dieses Mitglied nicht kicken!\n' +
                     'Meine Rolle ist möglicherweise niedriger als die des Mitglieds.'
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
         if (ziel.id === interaction.user.id) {
             return interaction.reply({
                 embeds: [createErrorEmbed('Du kannst dich nicht selbst kicken!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -80,13 +80,14 @@ module.exports = {
                     `**Grund:** ${grund}\n` +
                     `**Moderator:** ${interaction.user.tag}`
                 )],
+                flags: 64, // Ephemeral + Suppress Embeds
             });
 
         } catch (error) {
             logger.error('Fehler beim Kick', error);
             await interaction.reply({
                 embeds: [createErrorEmbed('Beim Kick ist ein Fehler aufgetreten!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
     }

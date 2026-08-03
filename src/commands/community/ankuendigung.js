@@ -91,7 +91,7 @@ module.exports = {
         if (!isModuleEnabled(interaction.guild.id, 'announcements')) {
             return interaction.reply({
                 embeds: [createErrorEmbed('Das Ankündigungs-Modul ist auf diesem Server deaktiviert!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -167,7 +167,7 @@ module.exports = {
                 new ActionRowBuilder().addComponents(kategorieSelect),
                 new ActionRowBuilder().addComponents(weiterButton),
             ],
-            ephemeral: true,
+            flags: 64, // Ephemeral + Suppress Embeds
         });
     }
 };

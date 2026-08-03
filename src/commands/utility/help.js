@@ -77,6 +77,6 @@ module.exports = {
 
         embed.setFooter({ text: 'Hundehütte • hundekuchenlive' });
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.reply({ embeds: [embed], flags: 64 });
     }
 };

@@ -33,7 +33,7 @@ module.exports = {
         if (!isModuleEnabled(interaction.guild.id, 'moderation')) {
             return interaction.reply({
                 embeds: [createErrorEmbed('Das Moderations-Modul ist auf diesem Server deaktiviert!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
         const ziel = interaction.options.getMember('mitglied');
@@ -44,7 +44,7 @@ module.exports = {
         if (!ziel) {
             return interaction.reply({
                 embeds: [createErrorEmbed('Dieses Mitglied wurde nicht gefunden!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -54,14 +54,14 @@ module.exports = {
                     'Ich kann dieses Mitglied nicht bannen!\n' +
                     'Meine Rolle ist möglicherweise niedriger als die des Mitglieds.'
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
         if (ziel.id === interaction.user.id) {
             return interaction.reply({
                 embeds: [createErrorEmbed('Du kannst dich nicht selbst bannen!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -92,13 +92,14 @@ module.exports = {
                     `**Nachrichten gelöscht:** Letzte ${tage} Tag(e)\n` +
                     `**Moderator:** ${interaction.user.tag}`
                 )],
+                flags: 64, // Ephemeral + Suppress Embeds
             });
 
         } catch (error) {
             logger.error('Fehler beim Ban', error);
             await interaction.reply({
                 embeds: [createErrorEmbed('Beim Ban ist ein Fehler aufgetreten!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
     }

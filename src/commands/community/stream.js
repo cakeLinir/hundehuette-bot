@@ -113,7 +113,7 @@ module.exports = {
                         'Keine Stream-Benachrichtigung konfiguriert!\n' +
                         'Richte sie ein mit `/stream setup`.'
                     )],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -127,7 +127,7 @@ module.exports = {
                         `**Erwähnung:** ${stream.mentionRoleId ? `<@&${stream.mentionRoleId}>` : 'Keine'}`,
                     ].join('\n')
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -137,7 +137,7 @@ module.exports = {
 
             return interaction.reply({
                 embeds: [createSuccessEmbed('Stream-Benachrichtigung wurde deaktiviert!')],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
     }

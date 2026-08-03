@@ -204,7 +204,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `Willkommens-Kanal wurde auf <#${kanal.id}> gesetzt!`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -218,7 +218,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `Feedback-Kanal wurde auf <#${kanal.id}> gesetzt!`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -235,7 +235,7 @@ module.exports = {
                     embeds: [createErrorEmbed(
                         `Die Rolle **${rolle.name}** hat bereits einen Button!`
                     )],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -246,7 +246,7 @@ module.exports = {
                         'Maximal **5 Rollen-Buttons** sind möglich.\n' +
                         'Entferne zuerst einen Button mit `/config rollen-remove`.'
                     )],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -258,7 +258,7 @@ module.exports = {
                     `Button für **${rolle.name}** wurde hinzugefügt!\n` +
                     `Führe \`/rollen-setup\` aus um die Nachricht zu aktualisieren.`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -276,7 +276,7 @@ module.exports = {
                     embeds: [createErrorEmbed(
                         `Für die Rolle **${rolle.name}** existiert kein Button.`
                     )],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -287,7 +287,7 @@ module.exports = {
                     `Button für **${rolle.name}** wurde entfernt!\n` +
                     `Führe \`/rollen-setup\` aus um die Nachricht zu aktualisieren.`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -336,7 +336,7 @@ module.exports = {
                     `\n**🛡️ Auto Mod:**\n${automodStatus}`,
                     `\n**🎮 Rollen-Buttons:**\n${rollenListe}`,
                 ].join('\n'))],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -360,7 +360,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `Auto Mod wurde **${aktiv ? 'aktiviert ✅' : 'deaktiviert ❌'}**!`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -376,7 +376,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `Auto Mod Log-Kanal wurde auf <#${kanal.id}> gesetzt!`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -390,7 +390,7 @@ module.exports = {
             if (automod.bannedWords.includes(wort)) {
                 return interaction.reply({
                     embeds: [createErrorEmbed(`Das Wort \`${wort}\` ist bereits auf der Liste!`)],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -401,7 +401,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `Das Wort \`${wort}\` wurde zur Wortliste hinzugefügt!`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -424,7 +424,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `Das Wort \`${wort}\` wurde von der Wortliste entfernt!`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -440,7 +440,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `Link-Filter wurde **${aktiv ? 'aktiviert ✅' : 'deaktiviert ❌'}**!`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -456,7 +456,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `Spam-Filter wurde **${aktiv ? 'aktiviert ✅' : 'deaktiviert ❌'}**!`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
         // ── Twitch Channel ───────────────────────────────────────
@@ -472,7 +472,7 @@ module.exports = {
                     `Twitch-Kanal wurde auf **${username}** gesetzt!\n` +
                     `Nicht vergessen: Setze auch den Benachrichtigungs-Kanal mit \`/config twitch-notify\`.`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -492,7 +492,7 @@ module.exports = {
                     `Twitch Benachrichtigungs-Kanal wurde auf <#${kanal.id}> gesetzt!` +
                     (rolle ? `\nPing-Rolle: ${rolle}` : '')
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -505,7 +505,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     `Transcript-Kanal wurde auf <#${kanal.id}> gesetzt!`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 

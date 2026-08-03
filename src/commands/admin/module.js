@@ -102,7 +102,7 @@ module.exports = {
                     '✅ Modul aktiviert!',
                     `Das Modul **${info.name}** wurde aktiviert.\n> ${info.desc}`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -119,7 +119,7 @@ module.exports = {
                     '❌ Modul deaktiviert!',
                     `Das Modul **${info.name}** wurde deaktiviert.\n> ${info.desc}`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -143,7 +143,7 @@ module.exports = {
                     '⚙️ Module Übersicht',
                     `**🌐 Sprache:** ${langName}\n\n${moduleListe}`
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -158,7 +158,7 @@ module.exports = {
                 embeds: [createSuccessEmbed(
                     t(guildId, 'config.lang_set', { lang: langName })
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
     }

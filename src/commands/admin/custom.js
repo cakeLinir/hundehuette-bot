@@ -96,7 +96,7 @@ module.exports = {
                         'Maximal **25 Custom Commands** pro Server möglich!\n' +
                         'Lösche erst einen Command mit `/custom delete`.'
                     )],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -106,7 +106,7 @@ module.exports = {
                         `Der Command \`${name}\` existiert bereits!\n` +
                         `Lösche ihn zuerst mit \`/custom delete\`.`
                     )],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -120,7 +120,7 @@ module.exports = {
                     `Der Command \`${name}\` wurde erstellt!\n\n` +
                     `Nutze ihn mit \`/cmd name:${name}\``
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -140,7 +140,7 @@ module.exports = {
 
             return interaction.reply({
                 embeds: [createSuccessEmbed(`Der Command \`${name}\` wurde gelöscht!`)],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
 
@@ -154,7 +154,7 @@ module.exports = {
                         'Noch keine Custom Commands erstellt!\n' +
                         'Erstelle einen mit `/custom create`.'
                     )],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -168,7 +168,7 @@ module.exports = {
                     `📋 Custom Commands (${Object.keys(commands).length}/25)`,
                     liste
                 )],
-                ephemeral: true,
+                flags: 64, // Ephemeral + Suppress Embeds
             });
         }
     }

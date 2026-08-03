@@ -109,7 +109,7 @@ module.exports = {
                         `**⚙️ Commands:** \`${client.commands.size}\``,
                         `**🤖 Node.js:** \`${process.version}\``,
                     ].join('\n'))],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             } catch (_) {
                 console.warn('⚠️  Status Interaction abgelaufen.');

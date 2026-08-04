@@ -2,12 +2,14 @@ const { createWelcomeEmbed } = require('../utils/embedBuilder');
 const { t } = require('../utils/i18n');
 const { getGuildSettings } = require('../utils/settingsManager');
 const { isModuleEnabled } = require('../utils/moduleManager');
+const logger = require('../utils/logger');
 
 module.exports = {
     name: 'guildMemberAdd',
     once: false,
 
     async execute(member, client) {
+        const guildId = member.guild.id;
         if (!isModuleEnabled(member.guild.id, 'welcome')) return;
         const welcomeChannelId = getGuildSettings(member.guild.id).welcomeChannelId;
 

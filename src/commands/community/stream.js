@@ -1,11 +1,9 @@
-const {
-    SlashCommandBuilder,
-    PermissionFlagsBits,
-} = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { getGuildSettings, setGuildSettings } = require('../../utils/settingsManager');
 const { createEmbed, createErrorEmbed, createSuccessEmbed } = require('../../utils/embedBuilder');
 const { subscribeToStreamEvents } = require('../../utils/twitchSubscriptions');
-const { getUserInfo } = require('../../server/twitchEvents');
+const { getUserInfo } = require('../../utils/twitchApi'); // ← fix
+const logger = require('../../utils/logger');   // ← fix
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -47,30 +45,22 @@ module.exports = {
         const sub = interaction.options.getSubcommand();
         const guildId = interaction.guild.id;
 
-        // ── Setup ────────────────────────────────────────────────
         if (sub === 'setup') {
             await interaction.deferReply({ ephemeral: true });
-
             const twitchName = interaction.options.getString('twitch-name').toLowerCase();
             const kanal = interaction.options.getChannel('kanal');
             const rolle = interaction.options.getRole('erwaehnung');
 
             try {
-                // Twitch User-ID holen
-                const userInfo = await getUserInfo(null, twitchName);
-
+                const userInfo = await getUserInfo({ loginName: twitchName }); // ← fix
                 if (!userInfo) {
                     return interaction.editReply({
-                        embeds: [createErrorEmbed(
-                            `Twitch-Kanal \`${twitchName}\` wurde nicht gefunden!`
-                        )],
+                        embeds: [createErrorEmbed(`Twitch-Kanal \`${twitchName}\` wurde nicht gefunden!`)],
                     });
                 }
 
-                // EventSub Subscriptions erstellen
                 await subscribeToStreamEvents(userInfo.id);
 
-                // Config speichern
                 setGuildSettings(guildId, {
                     streamConfig: {
                         twitchUserId: userInfo.id,
@@ -78,22 +68,18 @@ module.exports = {
                         twitchName: userInfo.display_name,
                         channelId: kanal.id,
                         mentionRoleId: rolle?.id ?? null,
+                        liveMessageId: null,
                     }
                 });
 
                 return interaction.editReply({
-                    embeds: [createEmbed(
-                        'success',
-                        '✅ Stream-Benachrichtigung eingerichtet!',
-                        [
-                            `**Twitch-Kanal:** [${userInfo.display_name}](https://twitch.tv/${userInfo.login})`,
-                            `**Discord-Kanal:** <#${kanal.id}>`,
-                            `**Erwähnung:** ${rolle ? `<@&${rolle.id}>` : 'Keine'}`,
-                            `\nWenn **${userInfo.display_name}** live geht, wird eine Benachrichtigung in <#${kanal.id}> gepostet!`,
-                        ].join('\n')
-                    )],
+                    embeds: [createEmbed('success', '✅ Stream-Benachrichtigung eingerichtet!', [
+                        `**Twitch-Kanal:** [${userInfo.display_name}](https://twitch.tv/${userInfo.login})`,
+                        `**Discord-Kanal:** <#${kanal.id}>`,
+                        `**Erwähnung:** ${rolle ? `<@&${rolle.id}>` : 'Keine'}`,
+                        `\nWenn **${userInfo.display_name}** live geht, wird eine Benachrichtigung in <#${kanal.id}> gepostet!`,
+                    ].join('\n'))],
                 });
-
             } catch (error) {
                 logger.error('Fehler beim Stream Setup', error);
                 return interaction.editReply({
@@ -102,42 +88,29 @@ module.exports = {
             }
         }
 
-        // ── Status ───────────────────────────────────────────────
         if (sub === 'status') {
-            const settings = getGuildSettings(guildId);
-            const stream = settings.streamConfig;
-
+            const stream = getGuildSettings(guildId).streamConfig;
             if (!stream) {
                 return interaction.reply({
-                    embeds: [createErrorEmbed(
-                        'Keine Stream-Benachrichtigung konfiguriert!\n' +
-                        'Richte sie ein mit `/stream setup`.'
-                    )],
-                    flags: 64, // Ephemeral + Suppress Embeds
+                    embeds: [createErrorEmbed('Keine Stream-Benachrichtigung konfiguriert!\nRichte sie ein mit `/stream setup`.')],
+                    flags: 64,
                 });
             }
-
             return interaction.reply({
-                embeds: [createEmbed(
-                    'info',
-                    '📺 Stream Konfiguration',
-                    [
-                        `**Twitch-Kanal:** [${stream.twitchName}](https://twitch.tv/${stream.twitchLogin})`,
-                        `**Discord-Kanal:** <#${stream.channelId}>`,
-                        `**Erwähnung:** ${stream.mentionRoleId ? `<@&${stream.mentionRoleId}>` : 'Keine'}`,
-                    ].join('\n')
-                )],
-                flags: 64, // Ephemeral + Suppress Embeds
+                embeds: [createEmbed('info', '📺 Stream Konfiguration', [
+                    `**Twitch-Kanal:** [${stream.twitchName}](https://twitch.tv/${stream.twitchLogin})`,
+                    `**Discord-Kanal:** <#${stream.channelId}>`,
+                    `**Erwähnung:** ${stream.mentionRoleId ? `<@&${stream.mentionRoleId}>` : 'Keine'}`,
+                ].join('\n'))],
+                flags: 64,
             });
         }
 
-        // ── Disable ──────────────────────────────────────────────
         if (sub === 'disable') {
             setGuildSettings(guildId, { streamConfig: null });
-
             return interaction.reply({
                 embeds: [createSuccessEmbed('Stream-Benachrichtigung wurde deaktiviert!')],
-                flags: 64, // Ephemeral + Suppress Embeds
+                flags: 64,
             });
         }
     }

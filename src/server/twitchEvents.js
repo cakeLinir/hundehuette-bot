@@ -1,13 +1,10 @@
-const axios = require('axios');
 const logger = require('../utils/logger');
 const { getGuildSettings } = require('../utils/settingsManager');
 const { createEmbed } = require('../utils/embedBuilder');
+const { getStreamInfoById, getUserInfo } = require('../utils/twitchApi');
 
 let discordClient = null;
-
-function setClient(client) {
-    discordClient = client;
-}
+function setClient(client) { discordClient = client; }
 
 /**
  * Holt Stream-Informationen von der Twitch API
@@ -74,24 +71,18 @@ async function getAppToken() {
  */
 async function handleStreamOnline(event) {
     if (!discordClient) return;
-
     logger.info(`🎥 Stream Online: ${event.broadcaster_user_name}`);
 
     try {
         const [streamInfo, userInfo] = await Promise.all([
-            getStreamInfo(event.broadcaster_user_id),
-            getUserInfo(event.broadcaster_user_id),
+            getStreamInfoById(event.broadcaster_user_id),
+            getUserInfo({ userId: event.broadcaster_user_id }),
         ]);
 
-        // Alle Server nach Stream-Config durchsuchen
-        const guilds = discordClient.guilds.cache;
-
-        for (const [, guild] of guilds) {
+        for (const [, guild] of discordClient.guilds.cache) {
             const settings = getGuildSettings(guild.id);
             const stream = settings.streamConfig;
-
-            if (!stream?.channelId || !stream?.twitchUserId) continue;
-            if (stream.twitchUserId !== event.broadcaster_user_id) continue;
+            if (!stream?.channelId || stream.twitchUserId !== event.broadcaster_user_id) continue;
 
             const kanal = guild.channels.cache.get(stream.channelId);
             if (!kanal) continue;
@@ -104,36 +95,24 @@ async function handleStreamOnline(event) {
                 .setURL(`https://twitch.tv/${event.broadcaster_user_login}`)
                 .setThumbnail(userInfo?.profile_image_url ?? null)
                 .addFields(
-                    {
-                        name: '🎮 Spiel',
-                        value: streamInfo?.game_name ?? 'Unbekannt',
-                        inline: true,
-                    },
-                    {
-                        name: '👥 Zuschauer',
-                        value: `${streamInfo?.viewer_count ?? 0}`,
-                        inline: true,
-                    },
-                    {
-                        name: '🔗 Link',
-                        value: `[Jetzt zuschauen!](https://twitch.tv/${event.broadcaster_user_login})`,
-                        inline: true,
-                    }
+                    { name: '🎮 Spiel', value: streamInfo?.game_name ?? 'Unbekannt', inline: true },
+                    { name: '👥 Zuschauer', value: `${streamInfo?.viewer_count ?? 0}`, inline: true },
+                    { name: '🔗 Link', value: `[Jetzt zuschauen!](https://twitch.tv/${event.broadcaster_user_login})`, inline: true }
                 )
                 .setImage(
                     streamInfo?.thumbnail_url
                         ?.replace('{width}', '1280')
-                        ?.replace('{height}', '720')
-                    ?? null
-                );
+                        ?.replace('{height}', '720') ?? null
+                )
+                .setTimestamp();
 
-            const erwaehnung = stream.mentionRoleId
-                ? `<@&${stream.mentionRoleId}>`
-                : null;
+            const erwaehnung = stream.mentionRoleId ? `<@&${stream.mentionRoleId}>` : null;
+            const msg = await kanal.send({ content: erwaehnung ?? undefined, embeds: [embed] });
 
-            await kanal.send({
-                content: erwaehnung ?? undefined,
-                embeds: [embed],
+            // Nachricht-ID speichern um sie beim Offline-Event zu editieren
+            const { setGuildSettings } = require('../utils/settingsManager');
+            setGuildSettings(guild.id, {
+                streamConfig: { ...stream, liveMessageId: msg.id }
             });
 
             logger.success(`Stream-Benachrichtigung gesendet für ${event.broadcaster_user_name}`);
@@ -143,12 +122,46 @@ async function handleStreamOnline(event) {
     }
 }
 
-/**
- * Stream Offline Event verarbeiten
- */
 async function handleStreamOffline(event) {
+    if (!discordClient) return;
     logger.info(`📴 Stream Offline: ${event.broadcaster_user_name}`);
-    // Optional: Offline-Nachricht senden
+
+    try {
+        for (const [, guild] of discordClient.guilds.cache) {
+            const settings = getGuildSettings(guild.id);
+            const stream = settings.streamConfig;
+            if (!stream?.channelId || stream.twitchUserId !== event.broadcaster_user_id) continue;
+
+            const kanal = guild.channels.cache.get(stream.channelId);
+            if (!kanal) continue;
+
+            // Live-Nachricht editieren falls vorhanden
+            if (stream.liveMessageId) {
+                const liveMsg = await kanal.messages.fetch(stream.liveMessageId).catch(() => null);
+                if (liveMsg) {
+                    const offlineEmbed = createEmbed(
+                        'warning',
+                        `⚫ ${event.broadcaster_user_name} ist jetzt offline`,
+                        `Der Stream wurde beendet. Bis zum nächsten Mal! 👋`
+                    )
+                        .setURL(`https://twitch.tv/${event.broadcaster_user_login}`)
+                        .setTimestamp();
+
+                    await liveMsg.edit({ content: null, embeds: [offlineEmbed] });
+                }
+
+                // liveMessageId aufräumen
+                const { setGuildSettings } = require('../utils/settingsManager');
+                setGuildSettings(guild.id, {
+                    streamConfig: { ...stream, liveMessageId: null }
+                });
+            }
+
+            logger.info(`Offline-Benachrichtigung für ${event.broadcaster_user_name} (Guild ${guild.id})`);
+        }
+    } catch (error) {
+        logger.error('Fehler bei Stream Offline Event', error);
+    }
 }
 
-module.exports = { handleStreamOnline, handleStreamOffline, getAppToken, getUserInfo, setClient };
+module.exports = { handleStreamOnline, handleStreamOffline, setClient };

@@ -239,8 +239,8 @@ module.exports = {
                 });
             }
 
-            // Max. 5 Buttons pro Reihe (Discord Limit)
-            if (settings.rollenButtons.length >= 5) {
+            // Max. 25 Buttons pro Reihe (Discord Limit)
+            if (settings.rollenButtons.length >= 25) {
                 return interaction.reply({
                     embeds: [createErrorEmbed(
                         'Maximal **5 Rollen-Buttons** sind möglich.\n' +
@@ -413,7 +413,7 @@ module.exports = {
             if (!automod.bannedWords?.includes(wort)) {
                 return interaction.reply({
                     embeds: [createErrorEmbed(`Das Wort \`${wort}\` ist nicht auf der Liste!`)],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 
@@ -455,42 +455,6 @@ module.exports = {
             return interaction.reply({
                 embeds: [createSuccessEmbed(
                     `Spam-Filter wurde **${aktiv ? 'aktiviert ✅' : 'deaktiviert ❌'}**!`
-                )],
-                flags: 64, // Ephemeral + Suppress Embeds
-            });
-        }
-        // ── Twitch Channel ───────────────────────────────────────
-        if (sub === 'twitch-channel') {
-            const username = interaction.options.getString('username').toLowerCase();
-            const twitch = settings.twitch ?? {};
-
-            twitch.username = username;
-            setGuildSettings(guildId, { twitch });
-
-            return interaction.reply({
-                embeds: [createSuccessEmbed(
-                    `Twitch-Kanal wurde auf **${username}** gesetzt!\n` +
-                    `Nicht vergessen: Setze auch den Benachrichtigungs-Kanal mit \`/config twitch-notify\`.`
-                )],
-                flags: 64, // Ephemeral + Suppress Embeds
-            });
-        }
-
-        // ── Twitch Notify ────────────────────────────────────────
-        if (sub === 'twitch-notify') {
-            const kanal = interaction.options.getChannel('kanal');
-            const rolle = interaction.options.getRole('rolle');
-            const twitch = settings.twitch ?? {};
-
-            twitch.notifyChannelId = kanal.id;
-            if (rolle) twitch.roleId = rolle.id;
-
-            setGuildSettings(guildId, { twitch });
-
-            return interaction.reply({
-                embeds: [createSuccessEmbed(
-                    `Twitch Benachrichtigungs-Kanal wurde auf <#${kanal.id}> gesetzt!` +
-                    (rolle ? `\nPing-Rolle: ${rolle}` : '')
                 )],
                 flags: 64, // Ephemeral + Suppress Embeds
             });

@@ -1,16 +1,14 @@
-const { startTwitchWatcher } = require('../utils/twitchWatcher');
 const logger = require('../utils/logger');
-module.exports = {
-    name: 'clientReady',
-    once: true,
 
+module.exports = {
+    name: 'ready', // war: clientReady
+    once: true,
     execute(client) {
         logger.banner(client);
-
         client.user.setPresence({
             activities: [{ name: '🐾 hundekuchenlive | /help' }],
             status: 'online',
         });
-        startTwitchWatcher(client);
+        logger.success(`Bot eingeloggt als ${client.user.tag}`);
     }
-}
+};

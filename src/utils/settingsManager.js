@@ -1,60 +1,46 @@
-const fs = require('fs');
+const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 
-const settingsPath = path.join(__dirname, '..', '..', 'data', 'guildSettings.json');
+const dataDir = path.join(__dirname, '..', '..', 'data');
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+const db = new Database(path.join(dataDir, 'guildSettings.db'));
+
+// Tabelle erstellen falls nicht vorhanden
+db.exec(`
+    CREATE TABLE IF NOT EXISTS guild_settings (
+        guild_id TEXT PRIMARY KEY,
+        data     TEXT NOT NULL DEFAULT '{}'
+    )
+`);
+
+const stmtGet = db.prepare('SELECT data FROM guild_settings WHERE guild_id = ?');
+const stmtUpsert = db.prepare(`
+    INSERT INTO guild_settings (guild_id, data) VALUES (?, ?)
+    ON CONFLICT(guild_id) DO UPDATE SET data = excluded.data
+`);
 
 /**
- *  Lädt alle gespeicherten Guild-Settings
+ * Gibt die Settings einer Guild zurück.
  */
-function loadSettings() {
-    // Ordner erstellen falls er nicht existiert
-    const dataDir = path.join(__dirname, '..', '..', 'data');
-    if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-    }
-
-    if (!fs.existsSync(settingsPath)) {
-        fs.writeFileSync(settingsPath, JSON.stringify({}, null, 2));
-    }
-    return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-}
-
-
-/**
- * Speichert die Guild-Settings
- */
-function saveSettings(data) {
-    fs.writeFileSync(settingsPath, JSON.stringify(data, null, 2));
-}
-
-/** 
- * Gibt die Settings einer Bestimmten Guild zurück.
- * @param {string} guildId - Die ID der Guild
-*/
 function getGuildSettings(guildId) {
-    const settings = loadSettings();
-    if (!settings[guildId]) {
-        settings[guildId] = {
-            welcomeChannelId: null,
-            rollenButtons: [],
-        };
-        saveSettings(settings);
+    const row = stmtGet.get(guildId);
+    if (!row) {
+        const defaults = { welcomeChannelId: null, rollenButtons: [] };
+        stmtUpsert.run(guildId, JSON.stringify(defaults));
+        return defaults;
     }
-    return settings[guildId];
+    return JSON.parse(row.data);
 }
 
-/** 
- * Überschreibt die Settings einer Bestimmten Guild.
- * @param {string} guildId - Die ID der Guild
- * @param {object} newSettings - Die neuen Settings der Guild
-*/
+/**
+ * Überschreibt/merged die Settings einer Guild.
+ */
 function setGuildSettings(guildId, newSettings) {
-    const settings = loadSettings();
-    settings[guildId] = { ...settings[guildId], ...newSettings };
-    saveSettings(settings);
+    const current = getGuildSettings(guildId);
+    const merged = { ...current, ...newSettings };
+    stmtUpsert.run(guildId, JSON.stringify(merged));
 }
 
-module.exports = {
-    getGuildSettings,
-    setGuildSettings,
-};
+module.exports = { getGuildSettings, setGuildSettings };

@@ -535,7 +535,7 @@ module.exports = {
                 const embed = createEmbed('info', `📢 ${titel}`, inhalt)
                     .setAuthor({
                         name: interaction.user.username,
-                        iconURL: interaction.user.displayAvatarURL({ dynamic: true }),
+                        iconURL: interaction.user.displayAvatarURL({ extension: 'webp', forceStatic: false }),
                     })
                     .setFooter({ text: `Kategorie: ${kategorie ?? 'Keine'}` })
                     .setTimestamp();
@@ -600,7 +600,7 @@ module.exports = {
                     nachricht
                 ).setAuthor({
                     name: isAnonym ? t(guildId, 'feedback.anonym_user') : interaction.user.username,
-                    iconURL: isAnonym ? null : interaction.user.displayAvatarURL({ dynamic: true }),
+                    iconURL: isAnonym ? null : interaction.user.displayAvatarURL({ extension: 'webp', forceStatic: false }),
                 });
 
                 if (verbesserung) {

@@ -1,4 +1,3 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createWelcomeEmbed, createEmbed } = require('../utils/embedBuilder');
 const { t } = require('../utils/i18n');
 const { getGuildSettings } = require('../utils/settingsManager');
@@ -10,12 +9,11 @@ module.exports = {
     once: false,
     async execute(member, client) {
         const guildId = member.guild.id;
+        const settings = getGuildSettings(guildId);
 
         // ── Willkommensnachricht ────────────────────────────
         if (isModuleEnabled(guildId, 'welcome')) {
-            const welcomeChannelId = getGuildSettings(guildId).welcomeChannelId;
-            const channel = member.guild.channels.cache.get(welcomeChannelId);
-
+            const channel = member.guild.channels.cache.get(settings.welcomeChannelId);
             if (channel) {
                 const embed = createWelcomeEmbed(member)
                     .setTitle(t(guildId, 'welcome.title'))
@@ -31,41 +29,25 @@ module.exports = {
             }
         }
 
-        // ── Verifizierung ───────────────────────────────────
-        const settings = getGuildSettings(guildId);
-        if (!settings.verifyEnabled || !settings.verifyRoleId) return;
+        // ── Verifizierungs-DM (optionaler Hinweis) ──────────
+        if (!settings.verifyEnabled || !settings.verifyChannelId) return;
 
-        // Button — guildId im customId damit der Handler es auch aus DMs kennt
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`verify_btn:${guildId}`)
-                .setLabel('Jetzt verifizieren')
-                .setEmoji('🔐')
-                .setStyle(ButtonStyle.Primary)
-        );
-
-        const verifyEmbed = createEmbed(
+        const dmEmbed = createEmbed(
             'info',
-            `🔐 Willkommen auf ${member.guild.name}!`,
-            `Um Zugang zum Server zu erhalten, musst du dich einmalig verifizieren.\n\n` +
-            `Klicke auf den Button um deine Identität per **Discord OAuth** zu bestätigen.\n` +
-            `Dieser Vorgang dauert nur wenige Sekunden und ist vollständig sicher.`
+            `🔐 Verifizierung erforderlich`,
+            [
+                `Willkommen auf **${member.guild.name}**!`,
+                ``,
+                `Um Zugang zu erhalten, verifiziere dich bitte in <#${settings.verifyChannelId}>.`,
+                ``,
+                `Falls du den Kanal nicht siehst: Öffne den Server und suche nach dem Verifizierungs-Kanal.`,
+            ].join('\n')
         );
 
-        // Erst per DM versuchen, Fallback: Willkommens-Kanal
-        const dmGesendet = await member.send({ embeds: [verifyEmbed], components: [row] })
-            .then(() => true)
-            .catch(() => false);
-
-        if (!dmGesendet) {
-            const fallbackChannel = member.guild.channels.cache.get(settings.welcomeChannelId);
-            if (fallbackChannel) {
-                await fallbackChannel.send({
-                    content: `${member}`,
-                    embeds: [verifyEmbed],
-                    components: [row],
-                }).catch(() => { });
-            }
-        }
+        // Nur DM — kein Fallback-Post im Channel wenn DMs deaktiviert
+        // Der Verify-Kanal ist immer sichtbar und dient als Hauptweg
+        await member.send({ embeds: [dmEmbed] }).catch(() => {
+            logger.info(`DM nicht möglich für ${member.user.tag} — Verify-Kanal ist Hauptweg`);
+        });
     }
 };

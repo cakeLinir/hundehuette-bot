@@ -7,6 +7,7 @@ const {
 const fs = require('fs');
 const path = require('path');
 const { createEmbed, createErrorEmbed, createSuccessEmbed } = require('../../utils/embedBuilder');
+const logger = require('../../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()

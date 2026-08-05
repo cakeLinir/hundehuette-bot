@@ -58,6 +58,7 @@ app.post('/webhook/twitch', async (req, res) => {
 
 // ── OAuth Callback ──────────────────────────────────────────
 app.get('/auth/twitch/callback', require('./oauthCallback'));
+app.get('/auth/discord/callback', require('./discordCallback'));
 
 // ── Health Check ────────────────────────────────────────────
 app.get('/health', (req, res) => {

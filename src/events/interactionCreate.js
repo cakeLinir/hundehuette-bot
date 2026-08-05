@@ -385,13 +385,11 @@ module.exports = {
                 return;
             }
 
-
             // ── Ankündigung — Weiter Button ─────────────────────
             else if (interaction.customId === 'ankuendigung_weiter') {
                 const session = getSession(interaction.user.id, 'ankuendigung');
                 const { kanalId, kategorie, rollenIds } = session;
 
-                // Validierung — Kanal und Kategorie sind Pflicht
                 if (!kanalId && !kategorie) {
                     return interaction.reply({
                         embeds: [createErrorEmbed(
@@ -413,7 +411,6 @@ module.exports = {
                     });
                 }
 
-                // Template für die gewählte Kategorie laden
                 const template = TEMPLATES[kategorie] ?? '';
 
                 const modal = new ModalBuilder()
@@ -500,7 +497,65 @@ module.exports = {
                 await interaction.showModal(modal);
                 return;
             }
-        }
+
+            // ── Verifizierungs-Button ────────────────────────────
+            else if (interaction.customId?.startsWith('verify_btn:')) {
+                const crypto = require('crypto');
+                const { oauthSessions } = require('../utils/oauthSessions');
+
+                const guildId = interaction.customId.split(':')[1];
+
+                const guild = interaction.client.guilds.cache.get(guildId);
+                if (guild) {
+                    const settings = getGuildSettings(guildId);
+                    const memberRole = settings.verifyRoleId;
+                    const guildMember = await guild.members.fetch(interaction.user.id).catch(() => null);
+
+                    if (guildMember?.roles.cache.has(memberRole)) {
+                        return interaction.reply({
+                            embeds: [createSuccessEmbed('Du bist bereits verifiziert! ✅')],
+                            ephemeral: true,
+                        });
+                    }
+                }
+
+                const state = crypto.randomUUID();
+                oauthSessions.set(state, {
+                    discordUserId: interaction.user.id,
+                    guildId,
+                    expiresAt: Date.now() + 10 * 60 * 1000,
+                });
+
+                const params = new URLSearchParams({
+                    client_id: process.env.CLIENT_ID,
+                    redirect_uri: `${process.env.BOT_URL}/auth/discord/callback`,
+                    response_type: 'code',
+                    scope: 'identify',
+                    state,
+                });
+
+                const oauthUrl = `https://discord.com/oauth2/authorize?${params}`;
+
+                return interaction.reply({
+                    embeds: [createEmbed(
+                        'info',
+                        '🔐 Verifizierung starten',
+                        `Klicke den Button unten um dich bei Discord zu autorisieren.\n\n` +
+                        `> ℹ️ Wir erhalten dabei **nur** deine User-ID — keine E-Mail, kein Passwort.\n\n` +
+                        `⏱️ Der Link ist **10 Minuten** gültig.`
+                    )],
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setLabel('Bei Discord verifizieren')
+                            .setURL(oauthUrl)
+                            .setStyle(ButtonStyle.Link)
+                            .setEmoji('🔐')
+                    )],
+                    ephemeral: true,
+                });
+            }
+
+        } // ── Ende isButton() ────────────────────────────────────
 
         // ── Modal Submit ────────────────────────────────────────
         if (interaction.isModalSubmit()) {
@@ -527,7 +582,6 @@ module.exports = {
                 const titel = interaction.fields.getTextInputValue('titel');
                 const inhalt = interaction.fields.getTextInputValue('inhalt');
 
-                // Rollen-Pings zusammenbauen (leer = kein Ping)
                 const pingContent = (rollenIds?.length)
                     ? rollenIds.map(id => `<@&${id}>`).join(' ')
                     : undefined;
@@ -545,7 +599,6 @@ module.exports = {
                     embeds: [embed],
                 });
 
-                // Session aufräumen
                 deleteSession(interaction.user.id, 'ankuendigung');
 
                 logger.info(
@@ -568,7 +621,6 @@ module.exports = {
             if (interaction.customId?.startsWith('feedback_modal_')) {
                 await interaction.deferReply({ ephemeral: true });
 
-                // Format: feedback_modal_<identitaet>_<kategorie>
                 const ohnePrefix = interaction.customId.replace('feedback_modal_', '');
                 const trennIndex = ohnePrefix.indexOf('_');
                 const identitaet = ohnePrefix.substring(0, trennIndex);
@@ -612,7 +664,6 @@ module.exports = {
 
                 await feedbackKanal.send({ embeds: [embed] });
 
-                // Session aufräumen
                 deleteSession(interaction.user.id, 'feedback');
 
                 return interaction.editReply({

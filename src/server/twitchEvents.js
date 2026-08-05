@@ -1,74 +1,11 @@
 const logger = require('../utils/logger');
-const { getGuildSettings } = require('../utils/settingsManager');
+const { getGuildSettings, setGuildSettings } = require('../utils/settingsManager');
 const { createEmbed } = require('../utils/embedBuilder');
 const { getStreamInfoById, getUserInfo } = require('../utils/twitchApi');
 
 let discordClient = null;
 function setClient(client) { discordClient = client; }
 
-/**
- * Holt Stream-Informationen von der Twitch API
- */
-async function getStreamInfo(userId) {
-    const token = await getAppToken();
-
-    const res = await axios.get(`https://api.twitch.tv/helix/streams?user_id=${userId}`, {
-        headers: {
-            'Client-ID': process.env.TWITCH_CLIENT_ID,
-            'Authorization': `Bearer ${token}`,
-        }
-    });
-
-    return res.data.data[0] ?? null;
-}
-
-/**
- * Holt User-Informationen von der Twitch API
- */
-async function getUserInfo(userId = null, loginName = null) {
-    const token = await getAppToken();
-
-    const param = userId
-        ? `id=${userId}`
-        : `login=${loginName}`;
-
-    const res = await axios.get(`https://api.twitch.tv/helix/users?${param}`, {
-        headers: {
-            'Client-ID': process.env.TWITCH_CLIENT_ID,
-            'Authorization': `Bearer ${token}`,
-        }
-    });
-
-    return res.data.data[0] ?? null;
-}
-
-
-/**
- * App Access Token holen (für API-Anfragen ohne User-Kontext)
- */
-let cachedToken = null;
-let tokenExpiresAt = 0;
-
-async function getAppToken() {
-    if (cachedToken && Date.now() < tokenExpiresAt) return cachedToken;
-
-    const res = await axios.post('https://id.twitch.tv/oauth2/token', null, {
-        params: {
-            client_id: process.env.TWITCH_CLIENT_ID,
-            client_secret: process.env.TWITCH_CLIENT_SECRET,
-            grant_type: 'client_credentials',
-        }
-    });
-
-    cachedToken = res.data.access_token;
-    tokenExpiresAt = Date.now() + (res.data.expires_in * 1000) - 60000;
-
-    return cachedToken;
-}
-
-/**
- * Stream Online Event verarbeiten
- */
 async function handleStreamOnline(event) {
     if (!discordClient) return;
     logger.info(`🎥 Stream Online: ${event.broadcaster_user_name}`);
@@ -109,8 +46,6 @@ async function handleStreamOnline(event) {
             const erwaehnung = stream.mentionRoleId ? `<@&${stream.mentionRoleId}>` : null;
             const msg = await kanal.send({ content: erwaehnung ?? undefined, embeds: [embed] });
 
-            // Nachricht-ID speichern um sie beim Offline-Event zu editieren
-            const { setGuildSettings } = require('../utils/settingsManager');
             setGuildSettings(guild.id, {
                 streamConfig: { ...stream, liveMessageId: msg.id }
             });
@@ -135,29 +70,25 @@ async function handleStreamOffline(event) {
             const kanal = guild.channels.cache.get(stream.channelId);
             if (!kanal) continue;
 
-            // Live-Nachricht editieren falls vorhanden
             if (stream.liveMessageId) {
                 const liveMsg = await kanal.messages.fetch(stream.liveMessageId).catch(() => null);
                 if (liveMsg) {
-                    const offlineEmbed = createEmbed(
-                        'warning',
-                        `⚫ ${event.broadcaster_user_name} ist jetzt offline`,
-                        `Der Stream wurde beendet. Bis zum nächsten Mal! 👋`
-                    )
-                        .setURL(`https://twitch.tv/${event.broadcaster_user_login}`)
-                        .setTimestamp();
-
-                    await liveMsg.edit({ content: null, embeds: [offlineEmbed] });
+                    await liveMsg.edit({
+                        content: null,
+                        embeds: [createEmbed(
+                            'warning',
+                            `⚫ ${event.broadcaster_user_name} ist jetzt offline`,
+                            `Der Stream wurde beendet. Bis zum nächsten Mal! 👋`
+                        ).setURL(`https://twitch.tv/${event.broadcaster_user_login}`).setTimestamp()],
+                    });
                 }
 
-                // liveMessageId aufräumen
-                const { setGuildSettings } = require('../utils/settingsManager');
                 setGuildSettings(guild.id, {
                     streamConfig: { ...stream, liveMessageId: null }
                 });
             }
 
-            logger.info(`Offline-Benachrichtigung für ${event.broadcaster_user_name} (Guild ${guild.id})`);
+            logger.info(`Offline-Status aktualisiert für ${event.broadcaster_user_name}`);
         }
     } catch (error) {
         logger.error('Fehler bei Stream Offline Event', error);

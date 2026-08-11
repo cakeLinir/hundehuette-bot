@@ -2,15 +2,19 @@ const express = require('express');
 const authMiddleware = require('../middleware/auth');
 const { getGuildSettings, setGuildSettings } = require('../../utils/settingsManager');
 const { getModules, setModule, DEFAULT_MODULES } = require('../../utils/moduleManager');
+const { postVerifyEmbed } = require('../../commands/admin/verify');
 
 module.exports = (client) => {
     const router = express.Router();
 
     // Guilds wo User Admin ist
     router.get('/guilds', authMiddleware, (req, res) => {
-        const adminGuilds = req.session.guilds.filter(
-            g => (BigInt(g.permissions) & BigInt(0x8)) === BigInt(0x8)
-        );
+        const adminGuilds = req.session.guilds
+            .filter(g => (BigInt(g.permissions) & BigInt(0x8)) === BigInt(0x8))
+            .map(g => ({
+                ...g,
+                botPresent: client.guilds.cache.has(g.id)
+            }));
         res.json(adminGuilds);
     });
 
@@ -64,6 +68,22 @@ module.exports = (client) => {
         const { moduleName, enabled } = req.body;
         setModule(req.params.id, moduleName, enabled);
         res.json({ success: true });
+    });
+
+    // Verify Message posten
+    router.post('/guild/:id/verify/post', authMiddleware, async (req, res) => {
+        const guild = client.guilds.cache.get(req.params.id);
+        if (!guild) return res.status(404).json({ error: 'Guild nicht gefunden' });
+
+        const settings = getGuildSettings(req.params.id);
+        if (!settings.verifyChannelId) return res.status(400).json({ error: 'Kein Verify-Kanal konfiguriert' });
+
+        try {
+            await postVerifyEmbed(guild, settings.verifyChannelId);
+            res.json({ success: true });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
     });
 
     return router;

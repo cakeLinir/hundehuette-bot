@@ -158,3 +158,4 @@ async function postVerifyEmbed(guild, channelId) {
 
     await kanal.send({ embeds: [embed], components: [row] });
 }
+module.exports.postVerifyEmbed = postVerifyEmbed;

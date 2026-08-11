@@ -63,6 +63,8 @@ export default function Settings() {
     const [newWord, setNewWord] = useState('');
     const [modules, setModules] = useState(null);
     const [newRollenBtn, setNewRollenBtn] = useState({ roleId: '', label: '', emoji: '' });
+    const [newCmd, setNewCmd] = useState({ name: '', titel: '', inhalt: '', farbe: 'info' });
+
 
 
     useEffect(() => {
@@ -239,6 +241,100 @@ export default function Settings() {
                         </button>
                     </div>
                 </div>
+                {/* Verify */}
+                <div style={s.card}>
+                    <div style={s.cardTitle}>🔐 Verifizierung</div>
+
+                    <div style={{ ...s.toggle, borderBottom: 'none' }}>
+                        <span style={s.toggleLabel}>Aktiviert</span>
+                        <Toggle value={settings.verifyEnabled ?? false} onChange={v => set('verifyEnabled', v)} />
+                    </div>
+
+                    <label style={s.label}>Verify-Rolle</label>
+                    <RoleSelect roles={roles} value={settings.verifyRoleId} onChange={v => set('verifyRoleId', v)} />
+
+                    <label style={s.label}>Verify-Kanal</label>
+                    <ChannelSelect channels={channels} value={settings.verifyChannelId} onChange={v => set('verifyChannelId', v)} />
+
+                    <label style={s.label}>Log-Kanal (optional)</label>
+                    <ChannelSelect channels={channels} value={settings.verifyLogChannelId} onChange={v => set('verifyLogChannelId', v)} />
+
+                    <button
+                        style={{ ...s.addBtn, marginTop: '1rem', width: '100%' }}
+                        onClick={() => {
+                            if (!settings.verifyChannelId) return alert('Bitte zuerst einen Verify-Kanal setzen und speichern.');
+                            axios.post(`/api/guild/${guildId}/verify/post`)
+                                .then(() => { setSaved(true); setTimeout(() => setSaved(false), 2000); })
+                                .catch(e => alert('Fehler: ' + e.response?.data?.error));
+                        }}
+                    >
+                        📨 Verify-Nachricht posten
+                    </button>
+                </div>
+                {/* Custom Commands */}
+                <div style={s.card}>
+                    <div style={s.cardTitle}>
+                        ⚙️ Custom Commands
+                        <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--muted)', fontWeight: '400' }}>
+                            {Object.keys(settings.customCommands ?? {}).length}/25
+                        </span>
+                    </div>
+
+                    {Object.keys(settings.customCommands ?? {}).length === 0 && (
+                        <p style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Noch keine Commands erstellt.</p>
+                    )}
+
+                    {Object.entries(settings.customCommands ?? {}).map(([name, cmd]) => (
+                        <div key={name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--stroke)' }}>
+                            <div>
+                                <span style={{ fontSize: '0.875rem', fontWeight: '600' }}>`{name}`</span>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{cmd.titel}</div>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    const updated = { ...settings.customCommands };
+                                    delete updated[name];
+                                    set('customCommands', updated);
+                                }}
+                                style={{ background: 'rgba(255,100,100,0.1)', border: '1px solid rgba(255,100,100,0.2)', color: '#ff7070', borderRadius: '8px', padding: '4px 10px', cursor: 'pointer', fontSize: '0.8rem' }}
+                            >
+                                Löschen
+                            </button>
+                        </div>
+                    ))}
+
+                    {/* Neuen Command erstellen */}
+                    {Object.keys(settings.customCommands ?? {}).length < 25 && (
+                        <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                            <label style={s.label}>Name</label>
+                            <input style={s.input} placeholder="z.B. socials" value={newCmd.name} onChange={e => setNewCmd(p => ({ ...p, name: e.target.value.toLowerCase().replace(/\s+/g, '-') }))} />
+                            <label style={s.label}>Titel</label>
+                            <input style={s.input} placeholder="Embed-Titel" value={newCmd.titel} onChange={e => setNewCmd(p => ({ ...p, titel: e.target.value }))} />
+                            <label style={s.label}>Inhalt</label>
+                            <textarea style={{ ...s.input, minHeight: '80px', resize: 'vertical' }} placeholder="Embed-Inhalt" value={newCmd.inhalt} onChange={e => setNewCmd(p => ({ ...p, inhalt: e.target.value }))} />
+                            <label style={s.label}>Farbe</label>
+                            <select style={s.select} value={newCmd.farbe} onChange={e => setNewCmd(p => ({ ...p, farbe: e.target.value }))}>
+                                <option value="info">🔵 Blau</option>
+                                <option value="success">🟢 Grün</option>
+                                <option value="warning">🟡 Orange</option>
+                                <option value="error">🔴 Rot</option>
+                                <option value="default">⚫ Grau</option>
+                            </select>
+                            <button
+                                style={{ ...s.addBtn, marginTop: '0.5rem', width: '100%' }}
+                                onClick={() => {
+                                    if (!newCmd.name || !newCmd.titel || !newCmd.inhalt) return;
+                                    const updated = { ...(settings.customCommands ?? {}), [newCmd.name]: { titel: newCmd.titel, inhalt: newCmd.inhalt, farbe: newCmd.farbe } };
+                                    set('customCommands', updated);
+                                    setNewCmd({ name: '', titel: '', inhalt: '', farbe: 'info' });
+                                }}
+                            >
+                                + Command erstellen
+                            </button>
+                        </div>
+                    )}
+                </div>
+
 
 
             </div>

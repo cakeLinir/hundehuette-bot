@@ -37,13 +37,27 @@ export default function GuildSelect() {
 
                 <div style={s.grid}>
                     {guilds.map(g => (
-                        <div key={g.id} style={s.card} onClick={() => navigate(`/dashboard/${g.id}`)}>
+                        <div key={g.id} style={s.card}>
                             {g.icon
                                 ? <img src={`https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png`} style={s.icon} alt="" />
                                 : <div style={s.iconFallback}>{g.name[0]}</div>
                             }
                             <span style={s.guildName}>{g.name}</span>
-                            <span style={s.arrow}>Verwalten →</span>
+
+                            {g.botPresent ? (
+                                <button style={s.manageBtn} onClick={() => navigate(`/dashboard/${g.id}`)}>
+                                    Verwalten →
+                                </button>
+                            ) : (
+                                <a
+                                    href={`https://discord.com/oauth2/authorize?client_id=${import.meta.env.VITE_CLIENT_ID}&permissions=8&scope=bot%20applications.commands&guild_id=${g.id}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={s.inviteBtn}
+                                >
+                                    + Einladen
+                                </a>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -69,4 +83,6 @@ const s = {
     iconFallback: { width: '68px', height: '68px', borderRadius: '50%', background: 'linear-gradient(135deg, rgba(74,163,255,0.3), rgba(124,198,255,0.2))', border: '1px solid var(--stroke)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', fontWeight: '800' },
     guildName: { fontSize: '0.875rem', fontWeight: '700', textAlign: 'center', lineHeight: 1.3, color: 'var(--text)' },
     arrow: { fontSize: '0.75rem', color: 'var(--primary)' },
+    manageBtn: { width: '100%', padding: '6px 0', background: 'var(--panel-2)', border: '1px solid var(--stroke)', borderRadius: '10px', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700' },
+    inviteBtn: { width: '100%', padding: '6px 0', background: 'rgba(74,163,255,0.12)', border: '1px solid rgba(74,163,255,0.3)', borderRadius: '10px', color: 'var(--primary-2)', fontSize: '0.8rem', fontWeight: '700', textAlign: 'center', textDecoration: 'none', display: 'block' },
 };

@@ -1,0 +1,66 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #0b0f16;
+  --primary: #4aa3ff;
+  --primary-2: #7cc6ff;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel-2: rgba(255, 255, 255, 0.09);
+  --stroke: rgba(255, 255, 255, 0.10);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.70);
+  --shadow: rgba(0, 0, 0, 0.45);
+  --radius: 18px;
+  --radius-sm: 12px;
+}
+
+html,
+body {
+  background: radial-gradient(1200px 700px at 20% 0%, rgba(74, 163, 255, 0.18), transparent 60%),
+    radial-gradient(900px 600px at 80% 10%, rgba(124, 198, 255, 0.10), transparent 55%),
+    var(--bg);
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  line-height: 1.55;
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+p,
+.muted {
+  color: var(--muted);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(74, 163, 255, 0.3);
+  border-radius: 3px;
+}
+
+select option {
+  background: #0b0f16;
+}

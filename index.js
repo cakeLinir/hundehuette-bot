@@ -38,8 +38,10 @@ process.on('unhandledRejection', error => {
 client.login(process.env.TOKEN);
 
 // Nach client.login():
-client.once('ready', () => {
+client.once('clientReady', () => {
     setClient(client);
     startServer(client);
     logger.info(`✅ Bot eingeloggt als ${client.user.tag}`);
 });
+
+require('./src/web/server')(client);

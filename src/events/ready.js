@@ -1,7 +1,7 @@
 const logger = require('../utils/logger');
 
 module.exports = {
-    name: 'ready', // war: clientReady
+    name: 'clientReady', // war: clientReady
     once: true,
     execute(client) {
         logger.banner(client);

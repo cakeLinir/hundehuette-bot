@@ -187,6 +187,15 @@ module.exports = {
                 .setDescription('Der Kanal für geschlossene Ticket-Protokolle')
                 .setRequired(true)
             )
+        )
+        .addSubcommand(sub => sub
+            .setName('reboot-kanal')
+            .setDescription('Setzt den Kanal für automatische Reboot-Logs')
+            .addChannelOption(opt => opt
+                .setName('kanal')
+                .setDescription('Kanal in den Reboot-Meldungen gepostet werden')
+                .setRequired(true)
+            )
         ),
 
     async execute(interaction) {
@@ -327,6 +336,11 @@ module.exports = {
                 ].join('\n')
                 : '❌ **Deaktiviert**';
 
+            const rebootKanal = settings.restartLogChannelId
+                ? `<#${settings.restartLogChannelId}>`
+                : t(guildId, 'config.not_set');
+
+
             return interaction.reply({
                 embeds: [createEmbed('info', t(guildId, 'config.overview_title'), [
                     `**🌐 Sprache:** ${sprache}`,
@@ -335,6 +349,7 @@ module.exports = {
                     `**🎫 Ticket-Kategorie:** ${ticketKategorie}`,
                     `\n**🛡️ Auto Mod:**\n${automodStatus}`,
                     `\n**🎮 Rollen-Buttons:**\n${rollenListe}`,
+                    `**🔄 Reboot-Log-Kanal:** ${rebootKanal}`,
                 ].join('\n'))],
                 flags: 64, // Ephemeral + Suppress Embeds
             });
@@ -473,6 +488,17 @@ module.exports = {
             });
         }
 
+        // ── Reboot Log Kanal ─────────────────────────────────────
+        if (sub === 'reboot-kanal') {
+            const kanal = interaction.options.getChannel('kanal');
+            setGuildSettings(guildId, { restartLogChannelId: kanal.id });
+            return interaction.reply({
+                embeds: [createSuccessEmbed(
+                    `Reboot-Log-Kanal wurde auf <#${kanal.id}> gesetzt!`
+                )],
+                flags: 64,
+            });
+        }
 
     }
 };

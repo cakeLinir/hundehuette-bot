@@ -12,8 +12,6 @@ const {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
-    ChannelSelectMenuBuilder,
-    RoleSelectMenuBuilder,
 } = require('discord.js');
 
 // ── Ankündigungs-Templates ──────────────────────────────────
@@ -122,8 +120,7 @@ module.exports = {
             try {
                 await command.execute(interaction, client);
             } catch (error) {
-                logger.error(`Fehler bei "${interaction.commandName}" (Sub: ${interaction.options?.getSubcommand(false) ?? 'keiner'
-                    })`, error);
+                logger.error(`Fehler bei "${interaction.commandName}" (Sub: ${interaction.options?.getSubcommand(false) ?? 'keiner'})`, error);
 
                 try {
                     const errorMsg = {
@@ -143,19 +140,16 @@ module.exports = {
         // ── String Select Menus ─────────────────────────────────
         if (interaction.isStringSelectMenu()) {
 
-            // Feedback — Identität
             if (interaction.customId === 'feedback_identitaet') {
                 setSession(interaction.user.id, 'feedback', { identitaet: interaction.values[0] });
                 return interaction.deferUpdate();
             }
 
-            // Feedback — Kategorie
             if (interaction.customId === 'feedback_kategorie') {
                 setSession(interaction.user.id, 'feedback', { kategorie: interaction.values[0] });
                 return interaction.deferUpdate();
             }
 
-            // Ankündigung — Kategorie
             if (interaction.customId === 'ankuendigung_kategorie') {
                 setSession(interaction.user.id, 'ankuendigung', { kategorie: interaction.values[0] });
                 return interaction.deferUpdate();
@@ -164,8 +158,6 @@ module.exports = {
 
         // ── Channel Select Menus ────────────────────────────────
         if (interaction.isChannelSelectMenu()) {
-
-            // Ankündigung — Zielkanal
             if (interaction.customId === 'ankuendigung_kanal') {
                 setSession(interaction.user.id, 'ankuendigung', { kanalId: interaction.values[0] });
                 return interaction.deferUpdate();
@@ -174,8 +166,6 @@ module.exports = {
 
         // ── Role Select Menus ───────────────────────────────────
         if (interaction.isRoleSelectMenu()) {
-
-            // Ankündigung — Rollen (optional, kann leer sein)
             if (interaction.customId === 'ankuendigung_rollen') {
                 setSession(interaction.user.id, 'ankuendigung', { rollenIds: interaction.values });
                 return interaction.deferUpdate();
@@ -204,20 +194,12 @@ module.exports = {
                     if (hatRolle) {
                         await interaction.member.roles.remove(rolle);
                         await interaction.editReply({
-                            embeds: [createEmbed(
-                                'warning',
-                                t(guildId, 'roles.removed_title'),
-                                t(guildId, 'roles.removed', { rolle: rolle.name })
-                            )],
+                            embeds: [createEmbed('warning', t(guildId, 'roles.removed_title'), t(guildId, 'roles.removed', { rolle: rolle.name }))],
                         });
                     } else {
                         await interaction.member.roles.add(rolle);
                         await interaction.editReply({
-                            embeds: [createEmbed(
-                                'success',
-                                t(guildId, 'roles.added_title'),
-                                t(guildId, 'roles.added', { rolle: rolle.name })
-                            )],
+                            embeds: [createEmbed('success', t(guildId, 'roles.added_title'), t(guildId, 'roles.added', { rolle: rolle.name }))],
                         });
                     }
                 } catch (error) {
@@ -241,9 +223,7 @@ module.exports = {
 
                     if (vorhandenes) {
                         return interaction.editReply({
-                            embeds: [createErrorEmbed(
-                                t(guildId, 'ticket.already_open', { channel: `<#${vorhandenes.channelId}>` })
-                            )],
+                            embeds: [createErrorEmbed(t(guildId, 'ticket.already_open', { channel: `<#${vorhandenes.channelId}>` }))],
                         });
                     }
 
@@ -252,18 +232,9 @@ module.exports = {
                         type: 0,
                         parent: kategorieId,
                         permissionOverwrites: [
-                            {
-                                id: interaction.guild.id,
-                                deny: ['ViewChannel'],
-                            },
-                            {
-                                id: interaction.user.id,
-                                allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'],
-                            },
-                            {
-                                id: client.user.id,
-                                allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels'],
-                            },
+                            { id: interaction.guild.id, deny: ['ViewChannel'] },
+                            { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+                            { id: client.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'ManageChannels'] },
                         ],
                     });
 
@@ -296,23 +267,17 @@ module.exports = {
 
                     await ticketKanal.send({
                         content: `${interaction.user}`,
-                        embeds: [createEmbed(
-                            'info',
-                            t(guildId, 'ticket.created_title'),
-                            t(guildId, 'ticket.created_desc', {
-                                user: interaction.user,
-                                time: `<t:${Math.floor(Date.now() / 1000)}:F>`,
-                            })
-                        )],
+                        embeds: [createEmbed('info', t(guildId, 'ticket.created_title'), t(guildId, 'ticket.created_desc', {
+                            user: interaction.user,
+                            time: `<t:${Math.floor(Date.now() / 1000)}:F>`,
+                        }))],
                         components: [closeRow],
                     });
 
                     logger.ticket('Erstellt', interaction.user.tag);
 
                     await interaction.editReply({
-                        embeds: [createSuccessEmbed(
-                            t(guildId, 'ticket.success_created', { channel: `<#${ticketKanal.id}>` })
-                        )],
+                        embeds: [createSuccessEmbed(t(guildId, 'ticket.success_created', { channel: `<#${ticketKanal.id}>` }))],
                     });
 
                 } catch (error) {
@@ -337,11 +302,9 @@ module.exports = {
                     });
                 }
 
-                // Transcript erstellen
                 const { createTranscript } = require('../utils/transcript');
                 const transcriptDatei = await createTranscript(interaction.channel);
 
-                // Transcript in Log-Kanal posten
                 const transcriptKanal = settings.transcriptChannelId
                     ? interaction.guild.channels.cache.get(settings.transcriptChannelId)
                     : null;
@@ -351,32 +314,23 @@ module.exports = {
                     const ersteller = await interaction.guild.members.fetch(ticketInfo.userId).catch(() => null);
 
                     await transcriptKanal.send({
-                        embeds: [createEmbed(
-                            'info',
-                            '🎫 Ticket geschlossen',
-                            [
-                                `**Ersteller:** ${ersteller?.user.tag ?? 'Unbekannt'}`,
-                                `**Geschlossen von:** ${interaction.user.tag}`,
-                                `**Erstellt am:** <t:${Math.floor(ticketInfo.createdAt / 1000)}:F>`,
-                                `**Geschlossen am:** <t:${Math.floor(Date.now() / 1000)}:F>`,
-                            ].join('\n')
-                        )],
+                        embeds: [createEmbed('info', '🎫 Ticket geschlossen', [
+                            `**Ersteller:** ${ersteller?.user.tag ?? 'Unbekannt'}`,
+                            `**Geschlossen von:** ${interaction.user.tag}`,
+                            `**Erstellt am:** <t:${Math.floor(ticketInfo.createdAt / 1000)}:F>`,
+                            `**Geschlossen am:** <t:${Math.floor(Date.now() / 1000)}:F>`,
+                        ].join('\n'))],
                         files: [transcriptDatei],
                     });
                 }
 
                 await interaction.editReply({
-                    embeds: [createEmbed(
-                        'warning',
-                        t(guildId, 'ticket.closing_title'),
-                        t(guildId, 'ticket.closing') +
-                        (transcriptKanal ? '\n\n📄 Transcript wurde gespeichert.' : '')
-                    )],
+                    embeds: [createEmbed('warning', t(guildId, 'ticket.closing_title'),
+                        t(guildId, 'ticket.closing') + (transcriptKanal ? '\n\n📄 Transcript wurde gespeichert.' : ''))],
                 });
 
                 delete tickets[interaction.channel.id];
                 setGuildSettings(guildId, { tickets });
-
                 logger.ticket('Geschlossen', interaction.user.tag);
 
                 setTimeout(async () => {
@@ -388,13 +342,11 @@ module.exports = {
             // ── Ankündigung — Weiter Button ─────────────────────
             else if (interaction.customId === 'ankuendigung_weiter') {
                 const session = getSession(interaction.user.id, 'ankuendigung');
-                const { kanalId, kategorie, rollenIds } = session;
+                const { kanalId, kategorie } = session;
 
                 if (!kanalId && !kategorie) {
                     return interaction.reply({
-                        embeds: [createErrorEmbed(
-                            'Bitte wähle zuerst einen **Kanal** und eine **Kategorie** aus!'
-                        )],
+                        embeds: [createErrorEmbed('Bitte wähle zuerst einen **Kanal** und eine **Kategorie** aus!')],
                         ephemeral: true,
                     });
                 }
@@ -411,32 +363,30 @@ module.exports = {
                     });
                 }
 
-                const template = TEMPLATES[kategorie] ?? '';
-
                 const modal = new ModalBuilder()
                     .setCustomId('ankuendigung_modal')
                     .setTitle(`📢 Ankündigung — ${kategorie}`);
 
-                const titelInput = new TextInputBuilder()
-                    .setCustomId('titel')
-                    .setLabel('Titel der Ankündigung')
-                    .setStyle(TextInputStyle.Short)
-                    .setPlaceholder('z. B. Wichtige Neuigkeit!')
-                    .setMaxLength(100)
-                    .setRequired(true);
-
-                const inhaltInput = new TextInputBuilder()
-                    .setCustomId('inhalt')
-                    .setLabel('Inhalt')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder('Schreibe hier den Inhalt der Ankündigung...')
-                    .setValue(template)
-                    .setMaxLength(2000)
-                    .setRequired(true);
-
                 modal.addComponents(
-                    new ActionRowBuilder().addComponents(titelInput),
-                    new ActionRowBuilder().addComponents(inhaltInput),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('titel')
+                            .setLabel('Titel der Ankündigung')
+                            .setStyle(TextInputStyle.Short)
+                            .setPlaceholder('z. B. Wichtige Neuigkeit!')
+                            .setMaxLength(100)
+                            .setRequired(true)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('inhalt')
+                            .setLabel('Inhalt')
+                            .setStyle(TextInputStyle.Paragraph)
+                            .setPlaceholder('Schreibe hier den Inhalt der Ankündigung...')
+                            .setValue(TEMPLATES[kategorie] ?? '')
+                            .setMaxLength(2000)
+                            .setRequired(true)
+                    ),
                 );
 
                 await interaction.showModal(modal);
@@ -450,9 +400,7 @@ module.exports = {
 
                 if (!identitaet || !kategorie) {
                     return interaction.reply({
-                        embeds: [createErrorEmbed(
-                            'Bitte wähle zuerst **Identität** und **Kategorie** aus!'
-                        )],
+                        embeds: [createErrorEmbed('Bitte wähle zuerst **Identität** und **Kategorie** aus!')],
                         ephemeral: true,
                     });
                 }
@@ -461,36 +409,36 @@ module.exports = {
                     .setCustomId(`feedback_modal_${identitaet}_${kategorie}`)
                     .setTitle(`📬 Feedback — ${kategorie}`);
 
-                const nachrichtInput = new TextInputBuilder()
-                    .setCustomId('nachricht')
-                    .setLabel('Dein Feedback')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder('Schreibe hier dein Feedback...')
-                    .setMaxLength(1000)
-                    .setRequired(true);
-
-                const verbesserungInput = new TextInputBuilder()
-                    .setCustomId('verbesserung')
-                    .setLabel('Verbesserungsvorschlag (optional)')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder('Hast du einen Vorschlag zur Verbesserung?')
-                    .setRequired(false);
-
                 const rows = [
-                    new ActionRowBuilder().addComponents(nachrichtInput),
-                    new ActionRowBuilder().addComponents(verbesserungInput),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('nachricht')
+                            .setLabel('Dein Feedback')
+                            .setStyle(TextInputStyle.Paragraph)
+                            .setPlaceholder('Schreibe hier dein Feedback...')
+                            .setMaxLength(1000)
+                            .setRequired(true)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('verbesserung')
+                            .setLabel('Verbesserungsvorschlag (optional)')
+                            .setStyle(TextInputStyle.Paragraph)
+                            .setPlaceholder('Hast du einen Vorschlag zur Verbesserung?')
+                            .setRequired(false)
+                    ),
                 ];
 
                 if (kategorie === 'Sonstiges') {
-                    const sonstigesInput = new TextInputBuilder()
-                        .setCustomId('sonstiges_thema')
-                        .setLabel('Um welches Thema geht es?')
-                        .setStyle(TextInputStyle.Short)
-                        .setPlaceholder('Beschreibe kurz das Thema...')
-                        .setMaxLength(100)
-                        .setRequired(true);
-
-                    rows.unshift(new ActionRowBuilder().addComponents(sonstigesInput));
+                    rows.unshift(new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('sonstiges_thema')
+                            .setLabel('Um welches Thema geht es?')
+                            .setStyle(TextInputStyle.Short)
+                            .setPlaceholder('Beschreibe kurz das Thema...')
+                            .setMaxLength(100)
+                            .setRequired(true)
+                    ));
                 }
 
                 modal.addComponents(...rows);
@@ -500,58 +448,52 @@ module.exports = {
 
             // ── Verifizierungs-Button ────────────────────────────
             else if (interaction.customId?.startsWith('verify_btn:')) {
-                const crypto = require('crypto');
-                const { oauthSessions } = require('../utils/oauthSessions');
+                await interaction.deferReply({ ephemeral: true });
 
-                const guildId = interaction.customId.split(':')[1];
+                const verifyGuildId = interaction.customId.split(':')[1];
+                const settings = getGuildSettings(verifyGuildId);
+                const roleId = settings.verifyRoleId;
 
-                const guild = interaction.client.guilds.cache.get(guildId);
-                if (guild) {
-                    const settings = getGuildSettings(guildId);
-                    const memberRole = settings.verifyRoleId;
-                    const guildMember = await guild.members.fetch(interaction.user.id).catch(() => null);
-
-                    if (guildMember?.roles.cache.has(memberRole)) {
-                        return interaction.reply({
-                            embeds: [createSuccessEmbed('Du bist bereits verifiziert! ✅')],
-                            ephemeral: true,
-                        });
-                    }
+                if (!roleId) {
+                    return interaction.editReply({
+                        embeds: [createErrorEmbed('Keine Verifizierungs-Rolle konfiguriert. Bitte einen Admin kontaktieren.')],
+                    });
                 }
 
-                const state = crypto.randomUUID();
-                oauthSessions.set(state, {
-                    discordUserId: interaction.user.id,
-                    guildId,
-                    expiresAt: Date.now() + 10 * 60 * 1000,
-                });
+                const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
 
-                const params = new URLSearchParams({
-                    client_id: process.env.CLIENT_ID,
-                    redirect_uri: `${process.env.BOT_URL}/auth/discord/callback`,
-                    response_type: 'code',
-                    scope: 'identify',
-                    state,
-                });
+                if (!member) {
+                    return interaction.editReply({
+                        embeds: [createErrorEmbed('Dein Mitglied konnte nicht geladen werden. Bitte erneut versuchen.')],
+                    });
+                }
 
-                const oauthUrl = `https://discord.com/oauth2/authorize?${params}`;
+                if (member.roles.cache.has(roleId)) {
+                    return interaction.editReply({
+                        embeds: [createSuccessEmbed('Du bist bereits verifiziert! ✅')],
+                    });
+                }
 
-                return interaction.reply({
-                    embeds: [createEmbed(
-                        'info',
-                        '🔐 Verifizierung starten',
-                        `Klicke den Button unten um dich bei Discord zu autorisieren.\n\n` +
-                        `> ℹ️ Wir erhalten dabei **nur** deine User-ID — keine E-Mail, kein Passwort.\n\n` +
-                        `⏱️ Der Link ist **10 Minuten** gültig.`
-                    )],
-                    components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder()
-                            .setLabel('Bei Discord verifizieren')
-                            .setURL(oauthUrl)
-                            .setStyle(ButtonStyle.Link)
-                            .setEmoji('🔐')
-                    )],
-                    ephemeral: true,
+                await member.roles.add(roleId);
+
+                // Optional: Log-Kanal
+                const logKanal = settings.verifyLogChannelId
+                    ? interaction.guild.channels.cache.get(settings.verifyLogChannelId)
+                    : null;
+
+                if (logKanal) {
+                    await logKanal.send({
+                        embeds: [createEmbed('success', '🔐 Neuer Nutzer verifiziert', [
+                            `**User:** ${interaction.user.tag} (${interaction.user.id})`,
+                            `**Zeitpunkt:** <t:${Math.floor(Date.now() / 1000)}:F>`,
+                        ].join('\n'))],
+                    }).catch(() => { });
+                }
+
+                logger.info(`[Verify] ${interaction.user.tag} wurde verifiziert.`);
+
+                return interaction.editReply({
+                    embeds: [createSuccessEmbed('✅ Du wurdest erfolgreich verifiziert! Willkommen auf dem Server. 🐾')],
                 });
             }
 
@@ -567,24 +509,17 @@ module.exports = {
                 const session = getSession(interaction.user.id, 'ankuendigung');
                 const { kanalId, kategorie, rollenIds } = session;
 
-                const kanal = kanalId
-                    ? interaction.guild.channels.cache.get(kanalId)
-                    : null;
+                const kanal = kanalId ? interaction.guild.channels.cache.get(kanalId) : null;
 
                 if (!kanal) {
                     return interaction.editReply({
-                        embeds: [createErrorEmbed(
-                            'Der Zielkanal wurde nicht gefunden. Bitte starte den Vorgang erneut.'
-                        )],
+                        embeds: [createErrorEmbed('Der Zielkanal wurde nicht gefunden. Bitte starte den Vorgang erneut.')],
                     });
                 }
 
                 const titel = interaction.fields.getTextInputValue('titel');
                 const inhalt = interaction.fields.getTextInputValue('inhalt');
-
-                const pingContent = (rollenIds?.length)
-                    ? rollenIds.map(id => `<@&${id}>`).join(' ')
-                    : undefined;
+                const pingContent = rollenIds?.length ? rollenIds.map(id => `<@&${id}>`).join(' ') : undefined;
 
                 const embed = createEmbed('info', `📢 ${titel}`, inhalt)
                     .setAuthor({
@@ -594,25 +529,15 @@ module.exports = {
                     .setFooter({ text: `Kategorie: ${kategorie ?? 'Keine'}` })
                     .setTimestamp();
 
-                await kanal.send({
-                    content: pingContent,
-                    embeds: [embed],
-                });
+                await kanal.send({ content: pingContent, embeds: [embed] });
 
                 deleteSession(interaction.user.id, 'ankuendigung');
-
-                logger.info(
-                    `Ankündigung [${kategorie}] von ${interaction.user.tag} in #${kanal.name} gepostet`
-                );
+                logger.info(`Ankündigung [${kategorie}] von ${interaction.user.tag} in #${kanal.name} gepostet`);
 
                 return interaction.editReply({
-                    embeds: [createEmbed(
-                        'success',
-                        '✅ Ankündigung gepostet!',
+                    embeds: [createEmbed('success', '✅ Ankündigung gepostet!',
                         `Deine **${kategorie}**-Ankündigung wurde erfolgreich in <#${kanalId}> veröffentlicht.` +
-                        (rollenIds?.length
-                            ? `\n\n🔔 Gepingt: ${rollenIds.map(id => `<@&${id}>`).join(', ')}`
-                            : '')
+                        (rollenIds?.length ? `\n\n🔔 Gepingt: ${rollenIds.map(id => `<@&${id}>`).join(', ')}` : '')
                     )],
                 });
             }
@@ -642,34 +567,23 @@ module.exports = {
                     });
                 }
 
-                const anzeigeKategorie = sonstigesThema
-                    ? `Sonstiges — ${sonstigesThema}`
-                    : kategorie;
+                const anzeigeKategorie = sonstigesThema ? `Sonstiges — ${sonstigesThema}` : kategorie;
 
-                const embed = createEmbed(
-                    'info',
-                    `📬 Neues Feedback — ${anzeigeKategorie}`,
-                    nachricht
-                ).setAuthor({
-                    name: isAnonym ? t(guildId, 'feedback.anonym_user') : interaction.user.username,
-                    iconURL: isAnonym ? null : interaction.user.displayAvatarURL({ extension: 'webp', forceStatic: false }),
-                });
+                const embed = createEmbed('info', `📬 Neues Feedback — ${anzeigeKategorie}`, nachricht)
+                    .setAuthor({
+                        name: isAnonym ? t(guildId, 'feedback.anonym_user') : interaction.user.username,
+                        iconURL: isAnonym ? null : interaction.user.displayAvatarURL({ extension: 'webp', forceStatic: false }),
+                    });
 
                 if (verbesserung) {
-                    embed.addFields({
-                        name: t(guildId, 'feedback.improvement'),
-                        value: verbesserung,
-                    });
+                    embed.addFields({ name: t(guildId, 'feedback.improvement'), value: verbesserung });
                 }
 
                 await feedbackKanal.send({ embeds: [embed] });
-
                 deleteSession(interaction.user.id, 'feedback');
 
                 return interaction.editReply({
-                    embeds: [createEmbed(
-                        'success',
-                        t(guildId, 'feedback.sent_title'),
+                    embeds: [createEmbed('success', t(guildId, 'feedback.sent_title'),
                         t(guildId, 'feedback.sent_desc', {
                             anonym: isAnonym ? t(guildId, 'feedback.anonym_prefix') : '',
                         })

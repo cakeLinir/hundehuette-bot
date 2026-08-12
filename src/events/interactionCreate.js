@@ -482,13 +482,23 @@ module.exports = {
                     : null;
 
                 if (logKanal) {
+                    const member = interaction.member;
+                    const user = interaction.user;
+
                     await logKanal.send({
-                        embeds: [createEmbed('success', '🔐 Neuer Nutzer verifiziert', [
-                            `**User:** ${interaction.user.tag} (${interaction.user.id})`,
-                            `**Zeitpunkt:** <t:${Math.floor(Date.now() / 1000)}:F>`,
-                        ].join('\n'))],
+                        embeds: [createEmbed('success', '✅ Mitglied verifiziert', [
+                            `**User:** ${user.tag} (${user})`,
+                            `**User-ID:** \`${user.id}\``,
+                            `**Rolle erhalten:** <@&${roleId}>`,
+                            `**Account erstellt:** <t:${Math.floor(user.createdTimestamp / 1000)}:R>`,
+                            `**Server beigetreten:** <t:${Math.floor(member.joinedTimestamp / 1000)}:R>`,
+                            `**Zeit:** <t:${Math.floor(Date.now() / 1000)}:F>`,
+                        ].join('\n'))
+                            .setThumbnail(user.displayAvatarURL({ extension: 'webp', forceStatic: false }))
+                        ],
                     }).catch(() => { });
                 }
+
 
                 logger.info(`[Verify] ${interaction.user.tag} wurde verifiziert.`);
 

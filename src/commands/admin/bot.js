@@ -31,7 +31,7 @@ module.exports = {
         // ── Sync ─────────────────────────────────────────────────
         if (sub === 'sync') {
             try {
-                await interaction.deferReply({ ephemeral: true });
+                await interaction.deferReply({ flags: 64 });
             } catch (_) {
                 console.warn('⚠️  Sync Interaction abgelaufen.');
                 return;

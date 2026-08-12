@@ -46,7 +46,7 @@ module.exports = {
         const guildId = interaction.guild.id;
 
         if (sub === 'setup') {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: 64 });
             const twitchName = interaction.options.getString('twitch-name').toLowerCase();
             const kanal = interaction.options.getChannel('kanal');
             const rolle = interaction.options.getRole('erwaehnung');

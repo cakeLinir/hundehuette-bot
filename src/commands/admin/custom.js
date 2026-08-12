@@ -131,7 +131,7 @@ module.exports = {
             if (!commands[name]) {
                 return interaction.reply({
                     embeds: [createErrorEmbed(`Der Command \`${name}\` existiert nicht!`)],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral + Suppress Embeds
                 });
             }
 

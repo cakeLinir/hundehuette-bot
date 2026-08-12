@@ -87,7 +87,7 @@ module.exports = {
                     flags: 64,
                 });
             }
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: 64 });
             await postVerifyEmbed(interaction.guild, settings.verifyChannelId);
             return interaction.editReply({
                 embeds: [createSuccessEmbed(`Verifizierungs-Nachricht wurde erneut in <#${settings.verifyChannelId}> gepostet.`)],

@@ -113,7 +113,7 @@ module.exports = {
             if (!command) {
                 return interaction.reply({
                     embeds: [createErrorEmbed('Diesen Befehl kenne ich nicht!')],
-                    ephemeral: true,
+                    flags: 64, // Ephemeral
                 }).catch(() => { });
             }
 
@@ -125,7 +125,7 @@ module.exports = {
                 try {
                     const errorMsg = {
                         embeds: [createErrorEmbed('Bei diesem Befehl ist etwas schiefgelaufen.')],
-                        ephemeral: true,
+                        flags: 64, // Ephemeral
                     };
                     if (interaction.replied || interaction.deferred) {
                         await interaction.followUp(errorMsg);
@@ -178,7 +178,7 @@ module.exports = {
             // ── Rollen Buttons ──────────────────────────────────
             if (interaction.customId?.startsWith('rolle_')) {
                 try {
-                    await interaction.deferReply({ ephemeral: true });
+                    await interaction.deferReply({ flags: 64 });
 
                     const roleId = interaction.customId.replace('rolle_', '');
                     const rolle = interaction.guild.roles.cache.get(roleId);
@@ -211,7 +211,7 @@ module.exports = {
             // ── Ticket erstellen ────────────────────────────────
             else if (interaction.customId === 'ticket_erstellen') {
                 try {
-                    await interaction.deferReply({ ephemeral: true });
+                    await interaction.deferReply({ flags: 64 });
 
                     const settings = getGuildSettings(guildId);
                     const tickets = settings.tickets ?? {};
@@ -347,19 +347,19 @@ module.exports = {
                 if (!kanalId && !kategorie) {
                     return interaction.reply({
                         embeds: [createErrorEmbed('Bitte wähle zuerst einen **Kanal** und eine **Kategorie** aus!')],
-                        ephemeral: true,
+                        flags: 64,
                     });
                 }
                 if (!kanalId) {
                     return interaction.reply({
                         embeds: [createErrorEmbed('Bitte wähle zuerst einen **Kanal** aus!')],
-                        ephemeral: true,
+                        flags: 64,
                     });
                 }
                 if (!kategorie) {
                     return interaction.reply({
                         embeds: [createErrorEmbed('Bitte wähle zuerst eine **Kategorie** aus!')],
-                        ephemeral: true,
+                        flags: 64,
                     });
                 }
 
@@ -401,7 +401,7 @@ module.exports = {
                 if (!identitaet || !kategorie) {
                     return interaction.reply({
                         embeds: [createErrorEmbed('Bitte wähle zuerst **Identität** und **Kategorie** aus!')],
-                        ephemeral: true,
+                        flags: 64,
                     });
                 }
 
@@ -448,7 +448,7 @@ module.exports = {
 
             // ── Verifizierungs-Button ────────────────────────────
             else if (interaction.customId?.startsWith('verify_btn:')) {
-                await interaction.deferReply({ ephemeral: true });
+                await interaction.deferReply({ flags: 64 });
 
                 const verifyGuildId = interaction.customId.split(':')[1];
                 const settings = getGuildSettings(verifyGuildId);
@@ -504,7 +504,7 @@ module.exports = {
 
             // ── Ankündigung ─────────────────────────────────────
             if (interaction.customId === 'ankuendigung_modal') {
-                await interaction.deferReply({ ephemeral: true });
+                await interaction.deferReply({ flags: 64 });
 
                 const session = getSession(interaction.user.id, 'ankuendigung');
                 const { kanalId, kategorie, rollenIds } = session;
@@ -544,7 +544,7 @@ module.exports = {
 
             // ── Feedback Modal ──────────────────────────────────
             if (interaction.customId?.startsWith('feedback_modal_')) {
-                await interaction.deferReply({ ephemeral: true });
+                await interaction.deferReply({ flags: 64 });
 
                 const ohnePrefix = interaction.customId.replace('feedback_modal_', '');
                 const trennIndex = ohnePrefix.indexOf('_');

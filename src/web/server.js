@@ -19,9 +19,13 @@ module.exports = (client) => {
     app.use('/api', getDashboardRoutes(client));
 
     app.use(express.static(path.join(__dirname, '../../dashboard/dist')));
+    // Nur ausliefern wenn dist existiert
+    const distPath = path.join(__dirname, '../../dashboard/dist/index.html');
     app.get('/{*path}', (req, res) => {
-        res.sendFile(path.join(__dirname, '../../dashboard/dist/index.html'));
+        if (require('fs').existsSync(distPath)) {
+            res.sendFile(distPath);
+        } else {
+            res.status(404).send('Dashboard not built yet.');
+        }
     });
-
-    app.listen(3000, () => console.log('[Web] Dashboard läuft auf Port 3000'));
 };

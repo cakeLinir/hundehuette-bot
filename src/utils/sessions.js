@@ -1,29 +1,29 @@
-// sessions.js — mit automatischem TTL (Standard: 10 Minuten)
-const SESSION_TTL_MS = 10 * 60 * 1000;
+// sessions.js — In-Memory Sessions mit TTL (Standard: 30 Minuten)
+const SESSION_TTL_MS = 30 * 60 * 1000;
 const store = new Map(); // key: `${userId}:${type}` → { data, timer }
 
-function setSession(userId, type, partial) {
-    const key = `${userId}:${type}`;
-    const existing = store.get(key);
+function setSession(userId, type, partial = {}, ttl = SESSION_TTL_MS) {
+  const key = `${userId}:${type}`;
+  const existing = store.get(key);
 
-    // Alten Timer canceln
-    if (existing?.timer) clearTimeout(existing.timer);
+  if (existing?.timer) clearTimeout(existing.timer);
 
-    const data = { ...(existing?.data ?? {}), ...partial };
-    const timer = setTimeout(() => store.delete(key), SESSION_TTL_MS);
+  const data = { ...(existing?.data ?? {}), ...partial };
+  const timer = setTimeout(() => store.delete(key), ttl);
+  timer.unref?.(); // blockiert kein Beenden des Prozesses
 
-    store.set(key, { data, timer });
+  store.set(key, { data, timer });
 }
 
 function getSession(userId, type) {
-    return store.get(`${userId}:${type}`)?.data ?? {};
+  return store.get(`${userId}:${type}`)?.data ?? {};
 }
 
 function deleteSession(userId, type) {
-    const key = `${userId}:${type}`;
-    const entry = store.get(key);
-    if (entry?.timer) clearTimeout(entry.timer);
-    store.delete(key);
+  const key = `${userId}:${type}`;
+  const entry = store.get(key);
+  if (entry?.timer) clearTimeout(entry.timer);
+  store.delete(key);
 }
 
 module.exports = { setSession, getSession, deleteSession };

@@ -363,6 +363,9 @@ module.exports = {
                     });
                 }
 
+                // Timer neu starten, damit man in Ruhe schreiben kann
+                setSession(interaction.user.id, 'ankuendigung', {});
+
                 const modal = new ModalBuilder()
                     .setCustomId('ankuendigung_modal')
                     .setTitle(`📢 Ankündigung — ${kategorie}`);
@@ -392,6 +395,7 @@ module.exports = {
                 await interaction.showModal(modal);
                 return;
             }
+
 
             // ── Feedback — Weiter Button ────────────────────────
             else if (interaction.customId === 'feedback_weiter') {
@@ -519,9 +523,15 @@ module.exports = {
                 const session = getSession(interaction.user.id, 'ankuendigung');
                 const { kanalId, kategorie, rollenIds } = session;
 
-                const kanal = kanalId ? interaction.guild.channels.cache.get(kanalId) : null;
+                if (!kanalId) {
+                    return interaction.editReply({
+                        embeds: [createErrorEmbed('Die Sitzung ist abgelaufen (Bot-Neustart oder zu lange gewartet). Bitte starte `/ankuendigung` erneut.')],
+                    });
+                }
 
-                if (!kanal) {
+                // fetch statt nur cache → robust
+                const kanal = await interaction.guild.channels.fetch(kanalId).catch(() => null);
+                if (!kanal || !kanal.isTextBased()) {
                     return interaction.editReply({
                         embeds: [createErrorEmbed('Der Zielkanal wurde nicht gefunden. Bitte starte den Vorgang erneut.')],
                     });
@@ -529,7 +539,10 @@ module.exports = {
 
                 const titel = interaction.fields.getTextInputValue('titel');
                 const inhalt = interaction.fields.getTextInputValue('inhalt');
-                const pingContent = rollenIds?.length ? rollenIds.map(id => `<@&${id}>`).join(' ') : undefined;
+
+                const pingContent = rollenIds?.length
+                    ? rollenIds.map(id => `<@&${id}>`).join(' ')
+                    : undefined;
 
                 const embed = createEmbed('info', `📢 ${titel}`, inhalt)
                     .setAuthor({
@@ -539,7 +552,18 @@ module.exports = {
                     .setFooter({ text: `Kategorie: ${kategorie ?? 'Keine'}` })
                     .setTimestamp();
 
-                await kanal.send({ content: pingContent, embeds: [embed] });
+                try {
+                    await kanal.send({
+                        content: pingContent,
+                        embeds: [embed],
+                        allowedMentions: { roles: rollenIds ?? [] },
+                    });
+                } catch (error) {
+                    logger.error(`Ankündigung konnte nicht in #${kanal.name} gesendet werden`, error);
+                    return interaction.editReply({
+                        embeds: [createErrorEmbed(`Ich darf in <#${kanalId}> nicht schreiben. Prüfe meine Rechte (Kanal ansehen, Nachrichten senden, Links einbetten).`)],
+                    });
+                }
 
                 deleteSession(interaction.user.id, 'ankuendigung');
                 logger.info(`Ankündigung [${kategorie}] von ${interaction.user.tag} in #${kanal.name} gepostet`);
@@ -551,6 +575,7 @@ module.exports = {
                     )],
                 });
             }
+
 
             // ── Feedback Modal ──────────────────────────────────
             if (interaction.customId?.startsWith('feedback_modal_')) {

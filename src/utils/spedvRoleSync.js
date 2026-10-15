@@ -4,18 +4,10 @@ const logger = require('./logger');
 const { isModuleEnabled } = require('./moduleManager');
 const { fetchUsers, findDriver, isRankAllowed } = require('./spedvApi');
 const { checkNewDrivers } = require('./spedvWelcome');
+const { checkPromotions } = require('./spedvPromotion');
+const { findRank, getRankRoleId, allRankRoleIds } = require('./rankRoles');
 
 const linksPath = path.join(__dirname, '..', '..', 'data', 'etsLinks.json');
-
-// SpedV-Rangname -> Name der .env-Variable mit der Discord-Rollen-ID
-const RANK_ROLES = [
-    { rank: 'fahrer auf probe', env: 'ROLE_PROBEFAHRER' },
-    { rank: 'fahrer', env: 'ROLE_FAHRER' },
-    { rank: 'werkstattleiter', env: 'ROLE_WERKSTATTLEITER' },
-    { rank: 'geschäftsführer', env: 'ROLE_GESCHAEFTSFUEHRER' },
-];
-
-const norm = v => String(v ?? '').trim().toLowerCase();
 
 function readLinks() {
     try {
@@ -25,27 +17,24 @@ function readLinks() {
     }
 }
 
-function rankRoleId(rankName) {
-    const entry = RANK_ROLES.find(r => r.rank === norm(rankName));
-    return entry ? process.env[entry.env] || null : null;
-}
-
 /** Alle Rollen, die der Bot verwalten darf. Alles andere bleibt unangetastet. */
-function managedRoleIds() {
-    return [process.env.ETS_ROLE_ID, ...RANK_ROLES.map(r => process.env[r.env])].filter(Boolean);
+function managedRoleIds(guildId) {
+    return [process.env.ETS_ROLE_ID, ...allRankRoleIds(guildId)].filter(Boolean);
 }
 
 /** Rollen, die ein Fahrer aktuell haben soll. Ohne gültigen Rang: keine. */
-function targetRoleIds(driver) {
+function targetRoleIds(driver, guildId) {
     if (!driver || !isRankAllowed(driver)) return [];
-    return [process.env.ETS_ROLE_ID, rankRoleId(driver.rank?.name)].filter(Boolean);
+    const rankRole = getRankRoleId(guildId, findRank(driver.rank?.name));
+    return [process.env.ETS_ROLE_ID, rankRole].filter(Boolean);
 }
 
 /** Gleicht die Rollen eines Members mit dem SpedV-Stand ab. driver = null entzieht alles. */
 async function applyRoles(member, driver, reason) {
-    const target = new Set(targetRoleIds(driver));
+    const guildId = member.guild.id;
+    const target = new Set(targetRoleIds(driver, guildId));
     const toAdd = [...target].filter(id => !member.roles.cache.has(id));
-    const toRemove = managedRoleIds().filter(id => !target.has(id) && member.roles.cache.has(id));
+    const toRemove = managedRoleIds(guildId).filter(id => !target.has(id) && member.roles.cache.has(id));
 
     if (toAdd.length) await member.roles.add(toAdd, reason);
     if (toRemove.length) await member.roles.remove(toRemove, reason);
@@ -70,8 +59,9 @@ async function runSync(client) {
         return;
     }
 
-    // Neue Fahrer begrüßen (Fehler hier dürfen den Rollen-Sync nicht stoppen)
+    // Zusatzmodule: Fehler hier dürfen den Rollen-Sync nicht stoppen
     await checkNewDrivers(guild, users).catch(err => logger.error('Welcome: Unerwarteter Fehler', err));
+    await checkPromotions(guild, users).catch(err => logger.error('Promotion: Unerwarteter Fehler', err));
 
     let changes = 0;
     for (const [spedvName, discordId] of Object.entries(readLinks())) {

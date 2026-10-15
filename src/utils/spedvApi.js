@@ -57,6 +57,7 @@ function normalizeUser(raw) {
         id: get(raw, 'id'),
         userName: get(raw, 'userName'),
         inSped: get(raw, 'inSped'),
+        joinDate: get(raw, 'speditionJoinDate') ?? null,
         rank: { name: get(get(raw, 'rank'), 'name') ?? null },
         spedition: { id: get(get(raw, 'spedition'), 'id') ?? null },
     };
@@ -95,6 +96,13 @@ async function fetchAboutMe(userId) {
     return String(get(profile, 'aboutMe') ?? '');
 }
 
+/** Liest nur die gefahrenen Kilometer aus dem Profil (für Beförderungsempfehlungen). */
+async function fetchStats(userId) {
+    const profile = await call('getuserprofile', { id: userId });
+    const km = Number(get(profile, 'kmSum'));
+    return { km: Number.isFinite(km) ? km : 0 };
+}
+
 function loadLinks() {
     return JSON.parse(fs.readFileSync(linksPath, 'utf-8'));
 }
@@ -110,5 +118,5 @@ function setLink(spedvName, discordId) {
 }
 
 module.exports = {
-    fetchUsers, findDriver, isRankAllowed, fetchAboutMe, getLinkOwner, setLink,
+    fetchUsers, findDriver, isRankAllowed, fetchAboutMe, fetchStats, getLinkOwner, setLink,
 };

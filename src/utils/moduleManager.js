@@ -2,13 +2,14 @@ const { getGuildSettings, setGuildSettings } = require('./settingsManager');
 
 // Alle verfügbaren Module mit Standardwert
 const DEFAULT_MODULES = {
-    welcome:       true,
-    roles:         true,
-    tickets:       true,
-    feedback:      true,
-    automod:       false,
+    welcome: true,
+    roles: true,
+    tickets: true,
+    feedback: true,
+    automod: false,
     announcements: true,
-    moderation:    true,
+    moderation: true,
+    ets: true,
 };
 
 /**
@@ -18,7 +19,7 @@ const DEFAULT_MODULES = {
  */
 function getModules(guildId) {
     const settings = getGuildSettings(guildId);
-    const modules  = settings.modules ?? {};
+    const modules = settings.modules ?? {};
 
     // Fehlende Module mit Standardwerten auffüllen
     for (const [key, defaultVal] of Object.entries(DEFAULT_MODULES)) {
@@ -48,7 +49,7 @@ function isModuleEnabled(guildId, moduleName) {
  */
 function setModule(guildId, moduleName, enabled) {
     const settings = getGuildSettings(guildId);
-    const modules  = getModules(guildId);
+    const modules = getModules(guildId);
 
     modules[moduleName] = enabled;
     setGuildSettings(guildId, { modules });

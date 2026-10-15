@@ -3,16 +3,45 @@ const { createEmbed, createErrorEmbed } = require('../../utils/embedBuilder');
 const { isModuleEnabled } = require('../../utils/moduleManager');
 const logger = require('../../utils/logger');
 const {
-    fetchUsers, findDriver, isRankAllowed, fetchDiscordUid, getLinkOwner, setLink,
+    fetchUsers, findDriver, isRankAllowed, fetchAboutMe, getLinkOwner, setLink,
 } = require('../../utils/spedvApi');
+const {
+    getPending, createPending, clearPending, codeInText, TTL_MS,
+} = require('../../utils/etsVerification');
+const { applyRoles } = require('../../utils/spedvRoleSync');
 
-const fail = (interaction, text) =>
-    interaction.editReply({ embeds: [createErrorEmbed(text)] });
+const COOLDOWN_MS = 15_000;
+const lastUse = new Map();
+
+const norm = v => String(v ?? '').trim().toLowerCase();
+const fail = (interaction, text) => interaction.editReply({ embeds: [createErrorEmbed(text)] });
+
+async function grantRoles(interaction, driver) {
+    try {
+        const { added, removed } = await applyRoles(interaction.member, driver, 'ETS2/ATS: SpedV-Rang geprüft');
+        const text = added + removed === 0
+            ? `Alles aktuell, **${driver.userName}** (${driver.rank?.name}).`
+            : `Deine Rollen sind aktualisiert, **${driver.userName}** (${driver.rank?.name}).`;
+        return interaction.editReply({ embeds: [createEmbed('success', '🚚 Willkommen im Fuhrpark!', text)] });
+    } catch (err) {
+        logger.error('ETS: Rollen konnten nicht vergeben werden', err);
+        return fail(
+            interaction,
+            'Ich darf die Rollen nicht vergeben. Das Team muss meine Bot-Rolle über die ETS2/ATS- und Rang-Rollen schieben.'
+        );
+    }
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('ets')
-        .setDescription('Hol dir die ETS2/ATS-Rolle (nur für Fahrer unserer Spedition)'),
+        .setDescription('Hol dir die ETS2/ATS-Rolle (nur für Fahrer unserer Spedition)')
+        .addStringOption(option =>
+            option
+                .setName('spedv-name')
+                .setDescription('Dein SpedV-Name, falls er nicht dein Server-Nickname ist')
+                .setRequired(false)
+        ),
 
     async execute(interaction) {
         const guildId = interaction.guild.id;
@@ -26,33 +55,28 @@ module.exports = {
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        const { SPEDV_API_KEY, ETS_ROLE_ID, ETS_ALLOWED_RANKS, ETS_REQUIRE_DISCORD_UID } = process.env;
+        const { SPEDV_API_KEY, ETS_ROLE_ID, ETS_ALLOWED_RANKS } = process.env;
         if (!SPEDV_API_KEY || !ETS_ROLE_ID || !ETS_ALLOWED_RANKS) {
             logger.warn('ETS: SPEDV_API_KEY, ETS_ROLE_ID oder ETS_ALLOWED_RANKS fehlt in der .env');
             return fail(interaction, 'Das Modul ist noch nicht fertig eingerichtet. Bitte melde dich beim Team.');
         }
 
-        const member = interaction.member;
-
-        if (member.roles.cache.has(ETS_ROLE_ID)) {
-            return interaction.editReply({
-                embeds: [createEmbed('info', 'ℹ️ Schon erledigt', 'Du hast die ETS2/ATS-Rolle bereits.')],
-            });
+        // Schutz vor Spam auf die SpedV-API
+        const last = lastUse.get(interaction.user.id);
+        if (last && Date.now() - last < COOLDOWN_MS) {
+            return fail(interaction, 'Bitte warte ein paar Sekunden, bevor du den Befehl erneut nutzt.');
         }
+        lastUse.set(interaction.user.id, Date.now());
+
+        const member = interaction.member;
+        const givenName = interaction.options.getString('spedv-name');
+        const candidates = givenName
+            ? [givenName]
+            : [member.displayName, interaction.user.globalName, interaction.user.username];
 
         let driver;
-        let linkedUid;
         try {
-            const users = await fetchUsers();
-            driver = findDriver(users, [
-                member.displayName,
-                interaction.user.globalName,
-                interaction.user.username,
-            ]);
-
-            if (driver && isRankAllowed(driver)) {
-                linkedUid = await fetchDiscordUid(driver.id);
-            }
+            driver = findDriver(await fetchUsers(), candidates);
         } catch (err) {
             logger.error('ETS: SpedV-Abfrage fehlgeschlagen', err);
             return fail(interaction, 'SpedV ist gerade nicht erreichbar. Versuch es später nochmal.');
@@ -62,7 +86,7 @@ module.exports = {
             return fail(
                 interaction,
                 'Ich finde dich nicht in unserer Spedition.\n' +
-                'Setz deinen **Server-Nickname exakt auf deinen SpedV-Namen** und versuch es nochmal.'
+                'Setz deinen **Server-Nickname auf deinen SpedV-Namen** oder nutze `/ets spedv-name:DeinName`.'
             );
         }
 
@@ -70,35 +94,52 @@ module.exports = {
             return fail(interaction, 'Dein Rang reicht noch nicht aus. Du brauchst mindestens **Fahrer auf Probe**.');
         }
 
-        if (linkedUid) {
-            // Sicherste Variante: SpedV-Profil ist mit genau diesem Discord-Account verknüpft
-            if (linkedUid !== interaction.user.id) {
-                return fail(interaction, 'Dieser SpedV-Account ist mit einem anderen Discord-Account verknüpft.');
-            }
-        } else if (ETS_REQUIRE_DISCORD_UID === 'true') {
-            return fail(interaction, 'Bitte hinterlege zuerst deinen Discord-Account in deinem SpedV-Profil.');
-        } else {
-            // Fallback: Namensabgleich + Bindung SpedV-Name -> Discord-ID
-            const owner = getLinkOwner(driver.userName);
-            if (owner && owner !== interaction.user.id) {
-                return fail(interaction, 'Dieser SpedV-Name ist bereits mit einem anderen Discord-Account verknüpft.');
-            }
+        // Schon verifiziert? Dann nur Rollen abgleichen.
+        const owner = getLinkOwner(driver.userName);
+        if (owner && owner !== interaction.user.id) {
+            return fail(interaction, 'Dieser SpedV-Account ist bereits mit einem anderen Discord-Account verknüpft.');
+        }
+        if (owner === interaction.user.id) {
+            return grantRoles(interaction, driver);
         }
 
+        // Verifizierung per Code im SpedV-Profil ("Über mich")
+        const pending = getPending(interaction.user.id);
+
+        if (!pending || norm(pending.spedvName) !== norm(driver.userName)) {
+            const created = createPending(interaction.user.id, driver.userName);
+            return interaction.editReply({
+                embeds: [createEmbed(
+                    'info',
+                    '🔐 Kurze Bestätigung nötig',
+                    `Damit niemand deinen Namen missbrauchen kann, bestätige bitte dein SpedV-Profil:\n\n` +
+                    `1. Trage diesen Code in SpedV im Profil unter **Über mich** ein:\n` +
+                    `**\`${created.code}\`**\n` +
+                    `2. Speichere das Profil.\n` +
+                    `3. Nutze danach erneut **/ets**.\n\n` +
+                    `Der Code ist ${TTL_MS / 60_000} Minuten gültig. Nach der Bestätigung kannst du ihn wieder löschen.`
+                )],
+            });
+        }
+
+        let aboutMe;
         try {
-            await member.roles.add(ETS_ROLE_ID, 'ETS2/ATS: SpedV-Rang geprüft');
+            aboutMe = await fetchAboutMe(driver.id);
         } catch (err) {
-            logger.error('ETS: Rolle konnte nicht vergeben werden', err);
+            logger.error('ETS: Profil konnte nicht gelesen werden', err);
+            return fail(interaction, 'SpedV ist gerade nicht erreichbar. Versuch es später nochmal.');
+        }
+
+        if (!codeInText(aboutMe, pending.code)) {
             return fail(
                 interaction,
-                'Ich darf die Rolle nicht vergeben. Das Team muss meine Bot-Rolle über die ETS2/ATS-Rolle schieben.'
+                `Ich finde den Code noch nicht in deinem Profil.\n` +
+                `Trage **\`${pending.code}\`** unter **Über mich** ein, speichere und versuch es nochmal.`
             );
         }
 
+        clearPending(interaction.user.id);
         setLink(driver.userName, interaction.user.id);
-
-        return interaction.editReply({
-            embeds: [createEmbed('success', '🚚 Willkommen im Fuhrpark!', `Du hast jetzt die ETS2/ATS-Rolle, **${driver.userName}**.`)],
-        });
+        return grantRoles(interaction, driver);
     },
 };

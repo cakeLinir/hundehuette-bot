@@ -12,26 +12,33 @@ const COLORS = {
 };
 
 /**
- * Gibt den aktuellen Zeitstempel zurück
+ * Gibt Datum + Uhrzeit zurück, z. B. "15.10.2026 16:23:23" (immer Europe/Berlin)
  */
 function timestamp() {
-    return new Date().toLocaleTimeString('de-DE', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-    });
+    return new Date()
+        .toLocaleString('de-DE', {
+            timeZone: 'Europe/Berlin',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        })
+        .replace(',', '');
 }
 
 /**
  * Formatiert eine Log-Zeile
- * @param {string} level  - Log-Level z.B. 'INFO'
- * @param {string} color  - Farbe des Levels
- * @param {string} msg    - Die Nachricht
+ * @param {string} level - Log-Level z.B. 'INFO'
+ * @param {string} color - Farbe des Levels
+ * @param {string} msg - Die Nachricht
+ * @param {'log'|'error'} stream - Ausgabekanal (error -> PM2 error.log)
  */
-function log(level, color, msg) {
+function log(level, color, msg, stream = 'log') {
     const time = `${COLORS.gray}[${timestamp()}]${RESET}`;
     const tag = `${BOLD}${color}[${level}]${RESET}`;
-    console.log(`${time} ${tag} ${msg}`);
+    console[stream](`${time} ${tag} ${msg}`);
 }
 
 const logger = {
@@ -57,10 +64,10 @@ const logger = {
     },
 
     /**
-     * Fehler — etwas ist schiefgelaufen
+     * Fehler — Kopfzeile UND Stacktrace gehen in den Error-Log, beide mit Zeitstempel
      */
     error(msg, err = null) {
-        log('ERR', COLORS.red, msg);
+        log('ERR', COLORS.red, msg, 'error');
         if (err) console.error(`${COLORS.red}${err.stack ?? err}${RESET}`);
     },
 

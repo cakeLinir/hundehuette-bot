@@ -50,6 +50,9 @@ function loadCommandData() {
         await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
 
         console.log('✅ Slash-Befehle erfolgreich registriert!');
+
+        // Command-Dateien können Timer oder Server starten: Prozess explizit beenden
+        process.exit(0);
     } catch (error) {
         console.error('❌ Fehler:', error.message);
         process.exit(1);

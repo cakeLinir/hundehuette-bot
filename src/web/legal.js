@@ -17,4 +17,14 @@ for (const [route, file] of Object.entries(pages)) {
     });
 }
 
+// Schrift und Logo lokal ausliefern (keine Abrufe bei Dritten)
+router.use(
+    '/legal-assets',
+    express.static(path.join(publicDir, 'legal-assets'), {
+        maxAge: '7d',
+        index: false,
+        fallthrough: false,
+    })
+);
+
 module.exports = router;

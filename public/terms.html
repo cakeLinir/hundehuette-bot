@@ -11,182 +11,206 @@
 </head>
 
 <body>
-    <a class="skip" href="#main">Direkt zum Inhalt springen</a>
-    <header class="site-header">
-        <div class="bar">
-            <a class="brand" href="https://hundekuchenlive.de/"><img
-                    src="https://hundekuchenlive.de/assets/img/hkl-logo.jpg" alt="hundekuchenlive-Logo" width="36"
-                    height="36">HundekuchenLive</a>
-            <nav class="nav" aria-label="Hauptnavigation">
+    <a class="skip-link" href="#main">Direkt zum Inhalt springen</a>
+
+    <header id="site-header">
+        <div class="container navbar">
+            <a class="brand" href="https://hundekuchenlive.de/" aria-label="hundekuchenlive Startseite">
+                <span class="brand-mark"><img src="/legal-assets/img/hkl-logo.jpg" alt="" width="48" height="48"></span>
+                <span class="brand-word">Hundekuchen<span class="brand-live">Live</span></span>
+            </a>
+            <nav id="site-nav" aria-label="Hauptnavigation">
                 <a href="https://hundekuchenlive.de/streamingplan/">Streamplan</a>
                 <a href="https://hundekuchenlive.de/about/">Über mich</a>
                 <a href="https://hundekuchenlive.de/partner/">Partner</a>
-                <a href="https://www.twitch.tv/hundekuchenlive">Twitch</a>
                 <a href="https://discord.gg/WfTbuyhXcJ">Discord</a>
             </nav>
+            <a class="btn primary header-cta" href="https://www.twitch.tv/hundekuchenlive">▶ Twitch</a>
         </div>
     </header>
 
     <main id="main">
-        <span class="eyebrow">Hundehütte Bot</span>
-        <h1>Nutzungsbedingungen</h1>
-        <p class="lead">Regeln für die Nutzung des Discord-Bots Hundehütte und seines Web-Dashboards, betrieben von
-            Justin Barth (hundekuchenlive). Stand: Oktober 2026. Anbieterangaben: <a
-                href="https://hundekuchenlive.de/impressum/">Impressum</a>.</p>
+        <section class="page-hero">
+            <div class="container">
+                <p class="kicker">Hundehütte Bot</p>
+                <h1 class="tag-title xl">Nutzungs&shy;bedingungen</h1>
+                <p class="lead">Regeln für die Nutzung des Discord-Bots Hundehütte und seines Web-Dashboards, betrieben
+                    von Justin Barth (hundekuchenlive). Anbieterangaben: <a
+                        href="https://hundekuchenlive.de/impressum/">Impressum</a>. Stand: Oktober 2026.</p>
+            </div>
+        </section>
 
-        <ol class="toc">
-            <li><a href="#geltung">Geltungsbereich</a></li>
-            <li><a href="#leistung">Leistungsumfang</a></li>
-            <li><a href="#voraussetzungen">Voraussetzungen</a></li>
-            <li><a href="#betreiber">Pflichten von Server-Betreibern</a></li>
-            <li><a href="#erlaubt">Erlaubte Nutzung</a></li>
-            <li><a href="#verboten">Verbotene Nutzung</a></li>
-            <li><a href="#drittanbieter">Drittanbieter</a></li>
-            <li><a href="#verfuegbarkeit">Verfügbarkeit</a></li>
-            <li><a href="#haftung">Haftung</a></li>
-            <li><a href="#datenschutz">Datenschutz</a></li>
-            <li><a href="#aenderungen">Änderungen</a></li>
-            <li><a href="#beendigung">Beendigung und Sperrung</a></li>
-            <li><a href="#recht">Anwendbares Recht</a></li>
-            <li><a href="#kontakt">Kontakt</a></li>
-        </ol>
+        <section class="section">
+            <div class="container">
+                <div class="legal">
+                    <ol class="legal-toc">
+                        <li><a href="#geltung">Geltungsbereich</a></li>
+                        <li><a href="#leistung">Leistungsumfang</a></li>
+                        <li><a href="#voraussetzungen">Voraussetzungen</a></li>
+                        <li><a href="#betreiber">Pflichten von Server-Betreibern</a></li>
+                        <li><a href="#erlaubt">Erlaubte Nutzung</a></li>
+                        <li><a href="#verboten">Verbotene Nutzung</a></li>
+                        <li><a href="#drittanbieter">Drittanbieter</a></li>
+                        <li><a href="#verfuegbarkeit">Verfügbarkeit</a></li>
+                        <li><a href="#haftung">Haftung</a></li>
+                        <li><a href="#datenschutz">Datenschutz</a></li>
+                        <li><a href="#aenderungen">Änderungen</a></li>
+                        <li><a href="#beendigung">Beendigung und Sperrung</a></li>
+                        <li><a href="#recht">Anwendbares Recht</a></li>
+                        <li><a href="#kontakt">Kontakt</a></li>
+                    </ol>
 
-        <h2 id="geltung"><span class="n">1.</span>Geltungsbereich</h2>
-        <p>Diese Bedingungen gelten für die Nutzung des Discord-Bots <strong>Hundehütte</strong> und des zugehörigen
-            Web-Dashboards. Mit der Einladung des Bots auf einen Server oder der Nutzung seiner Funktionen stimmst du
-            diesen Bedingungen zu. Der Dienst ist kostenlos.</p>
+                    <h2 id="geltung">1. Geltungsbereich</h2>
+                    <p>Diese Bedingungen gelten für die Nutzung des Discord-Bots <strong>Hundehütte</strong> und des
+                        zugehörigen Web-Dashboards. Mit der Einladung des Bots auf einen Server oder der Nutzung seiner
+                        Funktionen stimmst du diesen Bedingungen zu. Der Dienst ist kostenlos.</p>
 
-        <h2 id="leistung"><span class="n">2.</span>Leistungsumfang</h2>
-        <ul>
-            <li><strong>Willkommensnachrichten</strong> für neue Mitglieder</li>
-            <li><strong>Rollen-Buttons</strong> zur Selbstvergabe von Rollen</li>
-            <li><strong>Ticket-System</strong> mit privaten Kanälen und Transcripts beim Schließen</li>
-            <li><strong>Feedback-System</strong>, auch anonym</li>
-            <li><strong>Verifizierung</strong> neuer Mitglieder</li>
-            <li><strong>Auto-Moderation</strong> (verbotene Wörter, Links, Spam)</li>
-            <li><strong>Ankündigungen</strong> und <strong>Moderationsbefehle</strong> (Kick, Ban, Nachrichten löschen)
-            </li>
-            <li><strong>Custom Commands</strong>, <strong>Module</strong> pro Server, Deutsch und Englisch</li>
-            <li><strong>Twitch</strong>: Live-Benachrichtigungen und freiwillige Account-Verknüpfung</li>
-            <li><strong>ETS2/ATS-Modul</strong>: Abgleich mit SpedV, automatische Rollen, Begrüßung neuer Fahrer,
-                Beförderungsmeldungen</li>
-            <li><strong>Web-Dashboard</strong> zur Verwaltung durch Server-Administratoren</li>
-        </ul>
-        <p>Welche Funktionen auf einem Server aktiv sind, entscheidet das jeweilige Server-Team. Ich kann Funktionen
-            jederzeit ändern, ergänzen oder einstellen.</p>
+                    <h2 id="leistung">2. Leistungsumfang</h2>
+                    <ul>
+                        <li><strong>Willkommensnachrichten</strong> für neue Mitglieder</li>
+                        <li><strong>Rollen-Buttons</strong> zur Selbstvergabe von Rollen</li>
+                        <li><strong>Ticket-System</strong> mit privaten Kanälen und Transcripts beim Schließen</li>
+                        <li><strong>Feedback-System</strong>, auch anonym</li>
+                        <li><strong>Verifizierung</strong> neuer Mitglieder</li>
+                        <li><strong>Auto-Moderation</strong> (verbotene Wörter, Links, Spam)</li>
+                        <li><strong>Ankündigungen</strong> und <strong>Moderationsbefehle</strong> (Kick, Ban,
+                            Nachrichten löschen)</li>
+                        <li><strong>Custom Commands</strong>, <strong>Module</strong> pro Server, Deutsch und Englisch
+                        </li>
+                        <li><strong>Twitch</strong>: Live-Benachrichtigungen und freiwillige Account-Verknüpfung</li>
+                        <li><strong>ETS2/ATS-Modul</strong>: Abgleich mit SpedV, automatische Rollen, Begrüßung neuer
+                            Fahrer, Beförderungsmeldungen</li>
+                        <li><strong>Web-Dashboard</strong> zur Verwaltung durch Server-Administratoren</li>
+                    </ul>
+                    <p>Welche Funktionen auf einem Server aktiv sind, entscheidet das jeweilige Server-Team. Ich kann
+                        Funktionen jederzeit ändern, ergänzen oder einstellen.</p>
 
-        <h2 id="voraussetzungen"><span class="n">3.</span>Voraussetzungen</h2>
-        <ul>
-            <li>Du musst die <a href="https://discord.com/terms">Nutzungsbedingungen von Discord</a> einhalten.</li>
-            <li>Du musst das von Discord vorgeschriebene Mindestalter erreicht haben (mindestens 13 Jahre).</li>
-            <li>Das Dashboard dürfen nur Administratoren des jeweiligen Servers nutzen.</li>
-        </ul>
+                    <h2 id="voraussetzungen">3. Voraussetzungen</h2>
+                    <ul>
+                        <li>Du musst die <a href="https://discord.com/terms">Nutzungsbedingungen von Discord</a>
+                            einhalten.</li>
+                        <li>Du musst das von Discord vorgeschriebene Mindestalter erreicht haben (mindestens 13 Jahre).
+                        </li>
+                        <li>Das Dashboard dürfen nur Administratoren des jeweiligen Servers nutzen.</li>
+                    </ul>
 
-        <h2 id="betreiber"><span class="n">4.</span>Pflichten von Server-Betreibern</h2>
-        <p>Wer den Bot auf einem Server einsetzt, ist für die Konfiguration und die Inhalte auf seinem Server
-            verantwortlich. Insbesondere:</p>
-        <ul>
-            <li>Du informierst deine Mitglieder, wenn du Transcripts, Auto-Moderation, Verifizierung oder Log-Kanäle
-                aktivierst, weil dabei Nachrichten und Nutzerdaten verarbeitet werden.</li>
-            <li>Du gibst Zugriff auf Transcript-, Log- und Feedback-Kanäle nur Personen, die ihn brauchen.</li>
-            <li>Du konfigurierst den Bot rechtmäßig und im Einklang mit den Discord-Richtlinien.</li>
-            <li>Du gibst Zugangsdaten und Dashboard-Zugriff nicht an Unbefugte weiter.</li>
-        </ul>
+                    <h2 id="betreiber">4. Pflichten von Server-Betreibern</h2>
+                    <p>Wer den Bot auf einem Server einsetzt, ist für die Konfiguration und die Inhalte auf seinem
+                        Server verantwortlich. Insbesondere:</p>
+                    <ul>
+                        <li>Du informierst deine Mitglieder, wenn du Transcripts, Auto-Moderation, Verifizierung oder
+                            Log-Kanäle aktivierst, weil dabei Nachrichten und Nutzerdaten verarbeitet werden.</li>
+                        <li>Du gibst Zugriff auf Transcript-, Log- und Feedback-Kanäle nur Personen, die ihn brauchen.
+                        </li>
+                        <li>Du konfigurierst den Bot rechtmäßig und im Einklang mit den Discord-Richtlinien.</li>
+                        <li>Du gibst Zugangsdaten und Dashboard-Zugriff nicht an Unbefugte weiter.</li>
+                    </ul>
 
-        <h2 id="erlaubt"><span class="n">5.</span>Erlaubte Nutzung</h2>
-        <p>Der Bot darf für die Verwaltung und Organisation von Discord-Servern, für Community-Management und für
-            Moderationsaufgaben im Rahmen der Discord-Richtlinien genutzt werden.</p>
+                    <h2 id="erlaubt">5. Erlaubte Nutzung</h2>
+                    <p>Der Bot darf für die Verwaltung und Organisation von Discord-Servern, für Community-Management
+                        und für Moderationsaufgaben im Rahmen der Discord-Richtlinien genutzt werden.</p>
 
-        <h2 id="verboten"><span class="n">6.</span>Verbotene Nutzung</h2>
-        <ul>
-            <li>Illegale Aktivitäten jeder Art</li>
-            <li>Belästigung, Bedrohung oder Diskriminierung von Nutzern</li>
-            <li>Spam und automatisierte Massenaktionen</li>
-            <li>Umgehung von Sicherheitsmechanismen von Discord, Twitch, SpedV oder des Bots (z. B. Cooldowns,
-                Verifizierungscode)</li>
-            <li>Verknüpfung fremder Accounts oder Vortäuschen einer fremden Identität</li>
-            <li>Angriffe auf das Dashboard, die Webschnittstellen oder den Server, automatisiertes Auslesen von Daten
-            </li>
-            <li>Verbreitung von Malware oder schädlichen Inhalten</li>
-            <li>Verletzung von Urheberrechten oder anderen Schutzrechten</li>
-        </ul>
+                    <h2 id="verboten">6. Verbotene Nutzung</h2>
+                    <ul>
+                        <li>Illegale Aktivitäten jeder Art</li>
+                        <li>Belästigung, Bedrohung oder Diskriminierung von Nutzern</li>
+                        <li>Spam und automatisierte Massenaktionen</li>
+                        <li>Umgehung von Sicherheitsmechanismen von Discord, Twitch, SpedV oder des Bots (z. B.
+                            Cooldowns, Verifizierungscode)</li>
+                        <li>Verknüpfung fremder Accounts oder Vortäuschen einer fremden Identität</li>
+                        <li>Angriffe auf das Dashboard, die Webschnittstellen oder den Server, automatisiertes Auslesen
+                            von Daten</li>
+                        <li>Verbreitung von Malware oder schädlichen Inhalten</li>
+                        <li>Verletzung von Urheberrechten oder anderen Schutzrechten</li>
+                    </ul>
 
-        <h2 id="drittanbieter"><span class="n">7.</span>Drittanbieter</h2>
-        <p>Der Bot nutzt Discord, Twitch und SpedV. Ich habe keinen Einfluss auf deren Verfügbarkeit, Daten und
-            Bedingungen und übernehme keine Gewähr für die Richtigkeit von SpedV- oder Twitch-Daten. Rollen, Begrüßungen
-            und Beförderungsmeldungen folgen automatisch dem dortigen Stand. Entscheidungen über Beförderungen trifft
-            die Spedition.</p>
+                    <h2 id="drittanbieter">7. Drittanbieter</h2>
+                    <p>Der Bot nutzt Discord, Twitch und SpedV. Ich habe keinen Einfluss auf deren Verfügbarkeit, Daten
+                        und Bedingungen und übernehme keine Gewähr für die Richtigkeit von SpedV- oder Twitch-Daten.
+                        Rollen, Begrüßungen und Beförderungsmeldungen folgen automatisch dem dortigen Stand.
+                        Entscheidungen über Beförderungen trifft die Spedition.</p>
 
-        <h2 id="verfuegbarkeit"><span class="n">8.</span>Verfügbarkeit</h2>
-        <p>Ich bemühe mich um hohe Verfügbarkeit, garantiere sie aber nicht. Geplante Neustarts, Wartung, Updates,
-            technische Störungen und Ausfälle bei Dritten (z. B. Discord) können den Dienst vorübergehend einschränken.
-            Ein Anspruch auf Verfügbarkeit besteht nicht.</p>
+                    <h2 id="verfuegbarkeit">8. Verfügbarkeit</h2>
+                    <p>Ich bemühe mich um hohe Verfügbarkeit, garantiere sie aber nicht. Geplante Neustarts, Wartung,
+                        Updates, technische Störungen und Ausfälle bei Dritten (z. B. Discord) können den Dienst
+                        vorübergehend einschränken. Ein Anspruch auf Verfügbarkeit besteht nicht.</p>
 
-        <h2 id="haftung"><span class="n">9.</span>Haftung</h2>
-        <p>Ich hafte unbeschränkt bei Vorsatz, grober Fahrlässigkeit, Verletzung von Leben, Körper oder Gesundheit sowie
-            nach dem Produkthaftungsgesetz. Bei einfacher Fahrlässigkeit hafte ich nur bei Verletzung wesentlicher
-            Vertragspflichten und begrenzt auf den vorhersehbaren, typischen Schaden. Für Handlungen von
-            Server-Betreibern, Moderatoren und Nutzern sowie für Ausfälle der Discord-Plattform hafte ich nicht.</p>
+                    <h2 id="haftung">9. Haftung</h2>
+                    <p>Ich hafte unbeschränkt bei Vorsatz, grober Fahrlässigkeit, Verletzung von Leben, Körper oder
+                        Gesundheit sowie nach dem Produkthaftungsgesetz. Bei einfacher Fahrlässigkeit hafte ich nur bei
+                        Verletzung wesentlicher Vertragspflichten und begrenzt auf den vorhersehbaren, typischen
+                        Schaden. Für Handlungen von Server-Betreibern, Moderatoren und Nutzern sowie für Ausfälle der
+                        Discord-Plattform hafte ich nicht.</p>
 
-        <h2 id="datenschutz"><span class="n">10.</span>Datenschutz</h2>
-        <p>Wie ich Daten verarbeite, steht in der <a href="/privacy">Datenschutzerklärung zum Bot</a>.</p>
+                    <h2 id="datenschutz">10. Datenschutz</h2>
+                    <p>Wie ich Daten verarbeite, steht in der <a href="/privacy">Datenschutzerklärung zum Bot</a>.</p>
 
-        <h2 id="aenderungen"><span class="n">11.</span>Änderungen</h2>
-        <p>Ich kann diese Bedingungen ändern. Wesentliche Änderungen gebe ich auf dem hundekuchenlive-Discord-Server
-            bekannt. Wenn du den Bot nach der Änderung weiter nutzt, gelten die neuen Bedingungen.</p>
+                    <h2 id="aenderungen">11. Änderungen</h2>
+                    <p>Ich kann diese Bedingungen ändern. Wesentliche Änderungen gebe ich auf dem
+                        hundekuchenlive-Discord-Server bekannt. Wenn du den Bot nach der Änderung weiter nutzt, gelten
+                        die neuen Bedingungen.</p>
 
-        <h2 id="beendigung"><span class="n">12.</span>Beendigung und Sperrung</h2>
-        <p>Server-Administratoren können den Bot jederzeit entfernen. Bei Verstößen gegen diese Bedingungen oder die
-            Discord-Richtlinien kann ich den Bot ohne Vorankündigung von einem Server entfernen oder den Zugang sperren.
-            Nach dem Entfernen des Bots lösche ich die Daten des Servers auf Anfrage.</p>
+                    <h2 id="beendigung">12. Beendigung und Sperrung</h2>
+                    <p>Server-Administratoren können den Bot jederzeit entfernen. Bei Verstößen gegen diese Bedingungen
+                        oder die Discord-Richtlinien kann ich den Bot ohne Vorankündigung von einem Server entfernen
+                        oder den Zugang sperren. Nach dem Entfernen des Bots lösche ich die Daten des Servers auf
+                        Anfrage.</p>
 
-        <h2 id="recht"><span class="n">13.</span>Anwendbares Recht</h2>
-        <p>Es gilt das Recht der Bundesrepublik Deutschland. Zwingende Verbraucherschutzvorschriften deines
-            Wohnsitzstaates bleiben unberührt.</p>
+                    <h2 id="recht">13. Anwendbares Recht</h2>
+                    <p>Es gilt das Recht der Bundesrepublik Deutschland. Zwingende Verbraucherschutzvorschriften deines
+                        Wohnsitzstaates bleiben unberührt.</p>
 
-        <h2 id="kontakt"><span class="n">14.</span>Kontakt</h2>
-        <p>E-Mail: <a href="mailto:hundekuchenlive@impressum4u.de">hundekuchenlive@impressum4u.de</a> · Datenschutz: <a
-                href="mailto:privacy@hundekuchenlive.de">privacy@hundekuchenlive.de</a> · Discord: <a
-                href="https://discord.gg/WfTbuyhXcJ">hundekuchenlive Community</a></p>
+                    <h2 id="kontakt">14. Kontakt</h2>
+                    <p>E-Mail: <a href="mailto:hundekuchenlive@impressum4u.de">hundekuchenlive@impressum4u.de</a> ·
+                        Datenschutz: <a href="mailto:privacy@hundekuchenlive.de">privacy@hundekuchenlive.de</a> ·
+                        Discord: <a href="https://discord.gg/WfTbuyhXcJ">hundekuchenlive Community</a></p>
+                </div>
+            </div>
+        </section>
     </main>
 
-    <footer class="site-footer">
-        <div class="inner">
-            <div>
-                <p class="claim">Los Santos<br><span>wartet.</span></p>
-                <p class="small">Streams, Ranked und eine Crew, die mitredet. Live auf Twitch, Clips auf TikTok und
-                    YouTube.</p>
+    <footer id="site-footer">
+        <div class="tape-line footer-tape"></div>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-col">
+                    <p class="footer-claim">Los Santos<br>wartet.</p>
+                    <p>Streams, Ranked und eine Crew, die mitredet. Live auf Twitch, Clips auf TikTok und YouTube.</p>
+                </div>
+                <div class="footer-col">
+                    <h2>Crew</h2>
+                    <ul>
+                        <li><a href="https://hundekuchenlive.de/streamingplan/">Streamplan</a></li>
+                        <li><a href="https://hundekuchenlive.de/about/">Über mich</a></li>
+                        <li><a href="https://hundekuchenlive.de/partner/">Partner &amp; Kooperationen</a></li>
+                        <li><a href="https://streamelements.com/hundekuchenlive/tip">Support ↗</a></li>
+                        <li><a href="https://hundekuchenlive.de/cloud/">Creator-Cloud</a></li>
+                        <li><a href="https://shop.hundekuchenlive.de/">Merch ↗</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h2>Rechtliches</h2>
+                    <ul>
+                        <li><a href="https://hundekuchenlive.de/impressum/">Impressum</a></li>
+                        <li><a href="https://hundekuchenlive.de/datenschutz/">Datenschutz (Website)</a></li>
+                        <li><a href="/privacy">Datenschutz (Bot)</a></li>
+                        <li><a href="/terms">Nutzungsbedingungen (Bot)</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h2>Folgen</h2>
+                    <ul>
+                        <li><a href="https://www.twitch.tv/hundekuchenlive">Twitch ↗</a></li>
+                        <li><a href="https://www.tiktok.com/@hundekuchenlive">TikTok ↗</a></li>
+                        <li><a href="https://www.youtube.com/@hundekuchenlive">YouTube ↗</a></li>
+                        <li><a href="https://discord.gg/WfTbuyhXcJ">Discord ↗</a></li>
+                    </ul>
+                </div>
             </div>
-            <div>
-                <h3>Crew</h3>
-                <ul>
-                    <li><a href="https://hundekuchenlive.de/streamingplan/">Streamplan</a></li>
-                    <li><a href="https://hundekuchenlive.de/about/">Über mich</a></li>
-                    <li><a href="https://hundekuchenlive.de/partner/">Partner &amp; Kooperationen</a></li>
-                    <li><a href="https://streamelements.com/hundekuchenlive/tip">Support ↗</a></li>
-                    <li><a href="https://shop.hundekuchenlive.de/">Merch ↗</a></li>
-                </ul>
-            </div>
-            <div>
-                <h3>Rechtliches</h3>
-                <ul>
-                    <li><a href="https://hundekuchenlive.de/impressum/">Impressum</a></li>
-                    <li><a href="https://hundekuchenlive.de/datenschutz/">Datenschutz (Website)</a></li>
-                    <li><a href="/privacy">Datenschutz (Bot)</a></li>
-                    <li><a href="/terms">Nutzungsbedingungen (Bot)</a></li>
-                </ul>
-            </div>
-            <div>
-                <h3>Folgen</h3>
-                <ul>
-                    <li><a href="https://www.twitch.tv/hundekuchenlive">Twitch ↗</a></li>
-                    <li><a href="https://www.tiktok.com/@hundekuchenlive">TikTok ↗</a></li>
-                    <li><a href="https://www.youtube.com/@hundekuchenlive">YouTube ↗</a></li>
-                    <li><a href="https://discord.gg/WfTbuyhXcJ">Discord ↗</a></li>
-                </ul>
+            <div class="footer-bottom">
+                <p>© 2026 hundekuchenlive · Justin Barth</p>
             </div>
         </div>
-        <p class="copy">© 2026 hundekuchenlive · Justin Barth</p>
     </footer>
 </body>
 

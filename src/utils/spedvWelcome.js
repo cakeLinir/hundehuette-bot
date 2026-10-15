@@ -8,6 +8,8 @@ const dataDir = path.join(__dirname, '..', '..', 'data');
 const statePath = path.join(dataDir, 'etsWelcomeSeen.json');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
+let warnedNoChannel = false;
+
 /** Gibt null zurück, wenn es noch keinen Stand gibt (erster Lauf). */
 function loadState() {
     try {
@@ -48,7 +50,14 @@ function buildWelcome(driver) {
  */
 async function checkNewDrivers(guild, users) {
     const channelId = process.env.ETS_WELCOME_CHANNEL_ID;
-    if (!channelId) return;
+
+    if (!channelId) {
+        if (!warnedNoChannel) {
+            logger.warn('Welcome: ETS_WELCOME_CHANNEL_ID fehlt in der .env, Begrüßung ist aus');
+            warnedNoChannel = true;
+        }
+        return;
+    }
 
     const active = users.filter(u => u.inSped !== false && u.id != null);
     const known = loadState();

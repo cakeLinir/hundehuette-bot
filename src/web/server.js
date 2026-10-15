@@ -16,7 +16,9 @@ module.exports = (client) => {
     const distPath = path.join(__dirname, '../../dashboard/dist');
     const indexPath = path.join(distPath, 'index.html');
 
-    // Hinter Reverse-Proxy (IIS/Caddy/nginx) nötig
+    app.disable('x-powered-by');
+
+    // Hinter Caddy nötig, damit req.secure und Secure-Cookies funktionieren
     app.set('trust proxy', 1);
 
     // Öffentliche Seiten zuerst: ohne Session, ohne Login
@@ -30,11 +32,11 @@ module.exports = (client) => {
             httpOnly: true,
             sameSite: 'lax',
             secure: process.env.COOKIE_SECURE === 'true',
-            maxAge: 1000 * 60 * 60 * 24
-        }
+            maxAge: 1000 * 60 * 60 * 24,
+        },
     }));
 
-    app.use(express.json());
+    app.use(express.json({ limit: '100kb' }));
     app.use('/auth', authRoutes);
     app.use('/api', getDashboardRoutes(client));
     app.use(express.static(distPath));
@@ -48,11 +50,11 @@ module.exports = (client) => {
     });
 
     // Express 5: Listen-Fehler (z. B. EADDRINUSE) landen im Callback
-    app.listen(port, (err) => {
+    app.listen(port, '127.0.0.1', (err) => {
         if (err) {
             console.error(`[Web] Start auf Port ${port} fehlgeschlagen:`, err.message);
             return;
         }
-        console.log(`[Web] Dashboard läuft auf Port ${port}`);
+        console.log(`[Web] Dashboard läuft auf 127.0.0.1:${port}`);
     });
 };

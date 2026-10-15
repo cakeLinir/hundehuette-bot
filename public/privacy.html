@@ -123,7 +123,8 @@
             <tr>
                 <td>Mitgliederliste aus SpedV: SpedV-ID, Benutzername, Mitgliedsstatus, Beitrittsdatum, Rang</td>
                 <td>Wird standardmäßig alle 10 Minuten abgerufen und nur kurz im Arbeitsspeicher gehalten. Das betrifft
-                    <strong>alle aktiven Mitglieder der Spedition</strong>, auch ohne Discord-Verknüpfung.</td>
+                    <strong>alle aktiven Mitglieder der Spedition</strong>, auch ohne Discord-Verknüpfung.
+                </td>
             </tr>
             <tr>
                 <td>SpedV-ID, Benutzername und Rang aktiver Fahrer</td>
@@ -158,12 +159,12 @@
         </ul>
 
         <h3>3.9 Web-Dashboard (nur für Server-Administratoren)</h3>
-        <p>Beim Login über Discord-OAuth2 fordere ich die Berechtigungen <code>identify</code>, <code>email</code>,
-            <code>guilds</code> und <code>guilds.members.read</code> an. Verarbeitet werden dabei deine
-            Discord-Profildaten (ID, Benutzername, Avatar, E-Mail-Adresse), die Liste deiner Server samt Berechtigungen
-            und das Zugriffstoken. Alles liegt nur in der Sitzung im Arbeitsspeicher des Servers (maximal 24 Stunden).
-            Ich nutze es, um dich einzuloggen und dir die Server anzuzeigen, die du verwalten kannst. Die E-Mail-Adresse
-            wird nicht weiterverarbeitet.</p>
+        <p>Beim Login über Discord-OAuth2 fordere ich die Berechtigungen <code>identify</code> und <code>guilds</code>
+            an. Verarbeitet werden dabei deine Discord-Profildaten (ID, Benutzername, Anzeigename, Avatar) und die Liste
+            deiner Server mit Name, ID, Symbol und Berechtigungen. Das Zugriffstoken wird nach dem Login verworfen und
+            nicht gespeichert. Die übrigen Daten liegen nur in der Sitzung im Arbeitsspeicher des Servers (maximal 24
+            Stunden). Ich nutze sie, um dich einzuloggen und dir die Server anzuzeigen, die du verwalten kannst. Deine
+            E-Mail-Adresse wird nicht abgefragt.</p>
 
         <h3>3.10 Logs und technische Daten</h3>
         <p>Der Bot schreibt Betriebs-Logs (Konsole bzw. Logdateien des Prozess-Managers) mit Discord-Tags und IDs bei

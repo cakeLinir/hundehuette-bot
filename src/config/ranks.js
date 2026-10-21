@@ -1,15 +1,18 @@
+
 /**
- * Einzige Stelle, an der Ränge definiert werden.
- * Reihenfolge: niedrigster -> höchster Rang.
+ * Fahrer-Ränge der Spedition.
  *
- *  key          interner Schlüssel (nie ändern, wird in den Settings gespeichert)
- *  spedv        Rangname in SpedV (Groß-/Kleinschreibung egal)
- *  role         Name der Discord-Rolle
- *  env          optionale .env-Variable mit einer vorhandenen Rollen-ID
- *  color        Rollenfarbe
- *  permissions  NUR zusätzliche Rechte (Rechte sind additiv, Einschränkungen laufen über Kanal-Rechte)
- *  promotion    Kriterien für eine Beförderungsempfehlung zum nächsten Rang (null = nur manuell)
- *  leader       Leitungsrang (wird bei Empfehlungen gepingt)
+ * Reihenfolge: niedrigster -> höchster Rang.
+ * Diese Liste ist ausschließlich für die Beförderungskette zuständig.
+ *
+ * key          Interner Schlüssel; bestehende Schlüssel nicht ändern.
+ * spedv        Rangname in SpedV.
+ * role         Discord-Rollenname.
+ * env          Optionale .env-Variable mit einer vorhandenen Rollen-ID.
+ * color        Discord-Rollenfarbe.
+ * permissions  Zusätzliche Discord-Rechte.
+ * promotion    Kriterien für eine Empfehlung zum nächsten Fahrerrang.
+ * leader       Ob dieser Rang bei Beförderungsempfehlungen gepingt wird.
  */
 module.exports = [
     {
@@ -49,50 +52,7 @@ module.exports = [
         env: 'ROLE_SENIORFAHRER',
         color: 0xf1c40f,
         permissions: [],
-        promotion: { minDays: 182, minKm: 50000 },
-        leader: false,
-    },
-    {
-        key: 'werkstattleiter',
-        spedv: 'Werkstattleiter',
-        role: 'Werkstattleiter',
-        env: 'ROLE_WERKSTATTLEITER',
-        color: 0x00bcd4,
-        permissions: ['ManageMessages', 'ModerateMembers', 'ManageThreads', 'MuteMembers', 'MoveMembers'],
         promotion: null,
         leader: false,
-    },
-    {
-        key: 'buchhaltung',
-        spedv: 'Buchhaltung',
-        role: 'Buchhaltung',
-        env: 'ROLE_BUCHHALTUNG',
-        color: 0x9b59b6,
-        permissions: [],
-        promotion: null,
-        leader: false,
-    },
-    {
-        key: 'disposition',
-        spedv: 'Disposition',
-        role: 'Disposition',
-        env: 'ROLE_DISPOSITION',
-        color: 0x1abc9c,
-        permissions: [],
-        promotion: null,
-        leader: false,
-    },
-    {
-        key: 'geschaeftsfuehrer',
-        spedv: 'Geschäftsführer',
-        role: 'Geschäftsführer',
-        env: 'ROLE_GESCHAEFTSFUEHRER',
-        color: 0xff0000,
-        permissions: [
-            'ManageMessages', 'ModerateMembers', 'ManageThreads', 'MuteMembers', 'MoveMembers',
-            'KickMembers', 'ManageNicknames', 'MentionEveryone', 'ManageEvents', 'ViewAuditLog', 'PrioritySpeaker',
-        ],
-        promotion: null,
-        leader: true,
     },
 ];

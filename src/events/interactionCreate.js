@@ -2,6 +2,11 @@ const { createEmbed, createErrorEmbed, createSuccessEmbed } = require('../utils/
 const { getGuildSettings, setGuildSettings } = require('../utils/settingsManager');
 const { t } = require('../utils/i18n');
 const logger = require('../utils/logger');
+const {
+    handlePositionSelect,
+    handlePositionModal,
+    handlePositionDecision,
+} = require('../utils/positionApplicationInteractions');
 const { setSession, getSession, deleteSession } = require('../utils/sessions');
 
 const {
@@ -139,6 +144,8 @@ module.exports = {
 
         // ── String Select Menus ─────────────────────────────────
         if (interaction.isStringSelectMenu()) {
+            if (await handlePositionSelect(interaction)) return;
+
 
             if (interaction.customId === 'feedback_identitaet') {
                 setSession(interaction.user.id, 'feedback', { identitaet: interaction.values[0] });
@@ -174,6 +181,8 @@ module.exports = {
 
         // ── Button Klicks ───────────────────────────────────────
         if (interaction.isButton()) {
+            if (await handlePositionDecision(interaction)) return;
+
 
             // ── Rollen Buttons ──────────────────────────────────
             if (interaction.customId?.startsWith('rolle_')) {
@@ -515,6 +524,8 @@ module.exports = {
 
         // ── Modal Submit ────────────────────────────────────────
         if (interaction.isModalSubmit()) {
+            if (await handlePositionModal(interaction)) return;
+
 
             // ── Ankündigung ─────────────────────────────────────
             if (interaction.customId === 'ankuendigung_modal') {

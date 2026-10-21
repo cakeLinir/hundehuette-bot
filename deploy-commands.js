@@ -35,19 +35,23 @@ function loadCommandData() {
 
 (async () => {
     try {
-        // 1. Erst alles prüfen: bei einem Fehler bleibt bei Discord alles unverändert
+        // 1. Alle Befehle laden und prüfen, bevor Discord geändert wird.
         const commands = loadCommandData();
 
-        // 2. Alte Guild-Commands entfernen (verhindert doppelte Befehle)
-        console.log('\n🧹 Entferne alte Guild-Commands...');
+        // 2. Globale Commands zuerst registrieren.
+        // Bei einem Fehler bleiben vorhandene Guild-Commands unangetastet.
+        console.log(`Registriere ${commands.length} globale Slash-Befehl(e)...`);
+        await rest.put(
+            Routes.applicationCommands(process.env.CLIENT_ID),
+            { body: commands }
+        );
+
+        // 3. Erst nach erfolgreicher globaler Registrierung alte Guild-Commands entfernen.
+        console.log('Entferne alte Guild-Commands...');
         await rest.put(
             Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
             { body: [] }
         );
-
-        // 3. Globale Commands überschreiben
-        console.log(`🔄 Registriere ${commands.length} Slash-Befehl(e)...`);
-        await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
 
         console.log('✅ Slash-Befehle erfolgreich registriert!');
 

@@ -30,6 +30,25 @@ module.exports = {
 
         // ── Sync ─────────────────────────────────────────────────
         if (sub === 'sync') {
+            const ownerId = (process.env.BOT_OWNER_ID || '').trim();
+            const developerIds = (process.env.BOT_DEVELOPER_IDS || '')
+                .split(',')
+                .map(id => id.trim())
+                .filter(id => /^\d{17,20}$/.test(id));
+            const validOwnerId = /^\d{17,20}$/.test(ownerId);
+            const authorized = validOwnerId && (
+                interaction.user.id === ownerId ||
+                developerIds.includes(interaction.user.id)
+            );
+
+            if (!authorized) {
+                logger.warn(`Abgewiesener /bot sync-Zugriff von ${interaction.user.tag} (${interaction.user.id})`);
+                await interaction.reply({
+                    embeds: [createErrorEmbed('Du bist nicht als Bot-Eigentümer oder Entwickler freigegeben.')],
+                    flags: 64,
+                }).catch(() => {});
+                return;
+            }
             try {
                 await interaction.deferReply({ flags: 64 });
             } catch (_) {

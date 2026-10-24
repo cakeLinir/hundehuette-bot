@@ -52,7 +52,7 @@ module.exports = [
         env: 'ROLE_SENIORFAHRER',
         color: 0xf1c40f,
         permissions: [],
-        promotion: null,
+        promotion: { minDays: 60, minKm: 20000 },
         leader: false,
     },
 ];

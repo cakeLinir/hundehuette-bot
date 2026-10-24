@@ -71,12 +71,13 @@ async function fetchUsers() {
     return users;
 }
 
-function findDriver(users, candidates) {
+function findDriver(users, candidates, options = {}) {
     const wanted = candidates.map(norm).filter(Boolean);
     const spedId = process.env.SPEDV_SPEDITION_ID;
+    const { includeInactive = false } = options;
 
     return users.find(u => {
-        if (u.inSped === false) return false;
+        if (!includeInactive && u.inSped === false) return false;
         if (spedId && String(u.spedition.id) !== String(spedId)) return false;
         return wanted.includes(norm(u.userName));
     }) ?? null;

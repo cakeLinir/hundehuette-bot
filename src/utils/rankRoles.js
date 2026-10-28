@@ -1,27 +1,68 @@
 const RANKS = require('../config/ranks');
+const POSITIONS = require('../config/positions');
 const { getGuildSettings } = require('./settingsManager');
 
-const norm = v => String(v ?? '').trim().toLowerCase();
+const norm = value =>
+    String(value ?? '').trim().toLocaleLowerCase('de-DE');
 
-/** Rang-Definition zu einem SpedV-Rangnamen (oder null). */
+/** Findet einen Fahrerrang anhand seines SpedV-Namens. */
 function findRank(spedvName) {
-  return RANKS.find(r => norm(r.spedv) === norm(spedvName)) ?? null;
+    return RANKS.find(
+        rank => norm(rank.spedv) === norm(spedvName)
+    ) ?? null;
 }
 
-/** Position im Rang-System (0 = niedrigster), -1 wenn unbekannt. */
+/** Index innerhalb der Fahrerrangliste; -1 bei unbekanntem Rang. */
 function rankIndex(spedvName) {
-  return RANKS.findIndex(r => norm(r.spedv) === norm(spedvName));
+    return RANKS.findIndex(
+        rank => norm(rank.spedv) === norm(spedvName)
+    );
 }
 
-/** Discord-Rollen-ID eines Rangs: erst Server-Settings (/ets-rollen), dann .env als Fallback. */
+/** Erkennt, ob der SpedV-Name einer konfigurierten Funktionsstelle entspricht. */
+function findPosition(spedvName) {
+    return POSITIONS.find(position =>
+        norm(position.role) === norm(spedvName) ||
+        norm(position.name) === norm(spedvName)
+    ) ?? null;
+}
+
+/** Discord-Rollen-ID eines Fahrerrangs. */
 function getRankRoleId(guildId, rank) {
-  if (!rank) return null;
-  const saved = getGuildSettings(guildId).etsRankRoles ?? {};
-  return saved[rank.key] || process.env[rank.env] || null;
+    if (!rank) return null;
+
+    const saved = getGuildSettings(guildId).etsRankRoles ?? {};
+    return saved[rank.key] || process.env[rank.env] || null;
 }
 
+/** Discord-Rollen-ID einer Funktionsstelle. */
+function getPositionRoleId(guildId, position) {
+    if (!position) return null;
+
+    const saved = getGuildSettings(guildId).etsPositionRoles ?? {};
+    return saved[position.key] || process.env[position.env] || null;
+}
+
+/** Nur die Rollen der vier Fahrerränge, nicht die Funktionsstellen. */
 function allRankRoleIds(guildId) {
-  return RANKS.map(r => getRankRoleId(guildId, r)).filter(Boolean);
+    return [...new Set(
+        RANKS.map(rank => getRankRoleId(guildId, rank)).filter(Boolean)
+    )];
 }
 
-module.exports = { findRank, rankIndex, getRankRoleId, allRankRoleIds };
+/** Rollen-IDs aller konfigurierten Funktionsstellen. */
+function allPositionRoleIds(guildId) {
+    return [...new Set(
+        POSITIONS.map(position => getPositionRoleId(guildId, position)).filter(Boolean)
+    )];
+}
+
+module.exports = {
+    findRank,
+    rankIndex,
+    getRankRoleId,
+    allRankRoleIds,
+    findPosition,
+    getPositionRoleId,
+    allPositionRoleIds,
+};

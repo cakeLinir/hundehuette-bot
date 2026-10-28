@@ -218,7 +218,7 @@ module.exports = [
         key: 'konvoi_begleiter',
         spedv: 'Konvoi-Begleiter',
         role: 'Konvoi-Begleiter',
-        env: 'ROLE_KONVOIBEGLЕITER',
+        env: 'ROLE_KONVOIBEGLEITER',
         color: 0x1abc9c,
         permissions: [],
         leader: false,

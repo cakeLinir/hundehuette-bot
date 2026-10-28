@@ -1,3 +1,4 @@
+
 const fs = require('fs');
 const path = require('path');
 const writeFileAtomic = require('write-file-atomic');
@@ -18,45 +19,102 @@ if (!fs.existsSync(dataDir)) {
 const norm = value => String(value ?? '').trim().toLowerCase();
 
 /**
- * Ausschließlich reguläre Fahrerränge für die Beförderungskette.
- *
- * Neue Leitungs- und Funktionsränge aus ranks.js werden dadurch
- * nicht automatisch zu Beförderungsstufen.
- *
- * Der Fallback auf promotion ermöglicht die Verwendung älterer
- * Rangdefinitionen ohne category-Eigenschaft.
+ * Reguläre Fahrerränge in aufsteigender Reihenfolge.
+ * Diese Reihenfolge gilt ausschließlich für Beförderungen
+ * und Degradierungen innerhalb der Fahrer-Laufbahn.
  */
 const DRIVER_RANKS = RANKS.filter(
     rank => rank.category === 'driver' || rank.promotion
 );
 
-let warnedNoChannel = false;
+/**
+ * Vollständige Ranghierarchie, vom höchsten zum niedrigsten Rang.
+ * Wird für die Einordnung der Rangstufen und die Protokollierung
+ * verwendet. Funktionswechsel werden separat angekündigt.
+ */
+const ALL_RANKS_HIGH_TO_LOW = [
+    'Geschäftsführer',
+    'Stv. Geschäftsführer',
+    'Betriebsleiter',
+    'Dispositionsleiter',
+    'Buchhaltungsleiter',
+    'Fuhrparkmanagement',
+    'Ausbildungsleiter',
+    'Personalmanager',
+    'Event-Konvoimanager',
+    'Konvoileiter',
+    'Buchhaltung',
+    'Ausbilder',
+    'Disponent',
+    'Konvoibegleiter',
+    'Senior Fahrer',
+    'Fahrer',
+    'Junior Fahrer',
+    'Fahrer auf Probe',
+];
 
 /**
- * Liefert den Index eines regulären Fahrerrangs.
- * -1 bedeutet: unbekannter Rang oder Leitungs-/Funktionsrang.
+ * Bekannte Schreibweisen aus SpedV und der Bot-Konfiguration.
+ * Die eigentlichen Rangnamen in den Ankündigungen bleiben erhalten.
  */
-function driverRankIndex(rankName) {
-    return DRIVER_RANKS.findIndex(
-        rank => norm(rank.spedv) === norm(rankName)
+const RANK_ALIASES = new Map([
+    ['stellvertretender geschäftsführer', 'Stv. Geschäftsführer'],
+    ['stellv. geschäftsführer', 'Stv. Geschäftsführer'],
+    ['stv geschäftsführer', 'Stv. Geschäftsführer'],
+    ['event- und konvoimanager', 'Event-Konvoimanager'],
+    ['event und konvoimanager', 'Event-Konvoimanager'],
+    ['konvoi-leiter', 'Konvoileiter'],
+    ['konvoi-begleiter', 'Konvoibegleiter'],
+]);
+
+let warnedNoChannel = false;
+
+function normalizedRankName(rankName) {
+    const value = norm(rankName);
+    return norm(RANK_ALIASES.get(value) ?? value);
+}
+
+function canonicalRankName(rankName) {
+    const normalized = normalizedRankName(rankName);
+
+    return ALL_RANKS_HIGH_TO_LOW.find(
+        rank => normalizedRankName(rank) === normalized
+    ) ?? null;
+}
+
+function allRankIndex(rankName) {
+    const canonical = canonicalRankName(rankName);
+
+    if (!canonical) return -1;
+
+    return ALL_RANKS_HIGH_TO_LOW.findIndex(
+        rank => normalizedRankName(rank) === normalizedRankName(canonical)
     );
 }
 
 /**
+ * Liefert den Index eines regulären Fahrerrangs.
+ * -1 bedeutet, dass es kein regulärer Fahrerrang ist.
+ */
+function driverRankIndex(rankName) {
+    return DRIVER_RANKS.findIndex(
+        rank => normalizedRankName(rank.spedv) === normalizedRankName(rankName)
+    );
+}
+
+function isDriverRank(rankName) {
+    return driverRankIndex(rankName) !== -1;
+}
+
+/**
  * Lädt den gespeicherten Rangverlauf.
- * null bedeutet, dass noch kein gültiger Stand existiert.
+ * Ein fehlender oder ungültiger Stand wird als erster Lauf behandelt.
  */
 function loadState() {
     try {
-        const state = JSON.parse(
-            fs.readFileSync(statePath, 'utf-8')
-        );
+        const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
 
-        if (
-            !state ||
-            typeof state !== 'object' ||
-            Array.isArray(state)
-        ) {
+        if (!state || typeof state !== 'object' || Array.isArray(state)) {
             return null;
         }
 
@@ -73,27 +131,36 @@ function loadState() {
  * Speichert den Rangverlauf atomar.
  */
 function saveState(state) {
-    writeFileAtomic.sync(
-        statePath,
-        JSON.stringify(state, null, 2)
-    );
+    writeFileAtomic.sync(statePath, JSON.stringify(state, null, 2));
 }
 
 /**
- * Lädt die Discord-Verknüpfungen der Fahrer.
+ * Liest die Discord-Verknüpfungen aus data/etsLinks.json.
  */
 function readLinks() {
     try {
-        const links = JSON.parse(
-            fs.readFileSync(linksPath, 'utf-8')
-        );
+        const links = JSON.parse(fs.readFileSync(linksPath, 'utf-8'));
 
-        return links && typeof links === 'object'
+        return links && typeof links === 'object' && !Array.isArray(links)
             ? links
             : {};
     } catch {
         return {};
     }
+}
+
+/**
+ * Sucht die Discord-ID ohne Beachtung der Groß-/Kleinschreibung
+ * des SpedV-Benutzernamens.
+ */
+function getDiscordId(links, userName) {
+    const wanted = norm(userName);
+
+    const entry = Object.entries(links).find(
+        ([name]) => norm(name) === wanted
+    );
+
+    return entry?.[1] ? String(entry[1]) : null;
 }
 
 /**
@@ -128,7 +195,6 @@ function parseDate(value) {
             second
         );
 
-        // Ungültige Kalenderdaten nicht stillschweigend umwandeln.
         if (
             date.getFullYear() !== year ||
             date.getMonth() !== month - 1 ||
@@ -150,7 +216,7 @@ const daysSince = date =>
     Math.floor((Date.now() - date.getTime()) / 86_400_000);
 
 /**
- * Erstellt die Ankündigung einer regulären Fahrerbeförderung.
+ * Erstellt eine Ankündigung für einen Fahrer-Rangaufstieg.
  */
 function buildPromotion(driver, fromRank, toRank, discordId) {
     const who = discordId
@@ -162,24 +228,150 @@ function buildPromotion(driver, fromRank, toRank, discordId) {
         '🎉 Beförderung!',
         `${who} wurde befördert!\n\n` +
         `**${fromRank}** ➜ **${toRank}**\n\n` +
-        'Glückwunsch und weiterhin gute Fahrt! 🚚'
+        'Glückwunsch zum nächsten Rang und weiterhin gute Fahrt!'
     );
 }
 
 /**
- * Prüft Beförderungsempfehlungen für aktive Fahrer.
+ * Erstellt eine Ankündigung für eine Degradierung.
+ */
+function buildDemotion(driver, fromRank, toRank, discordId) {
+    const who = discordId
+        ? `<@${discordId}>`
+        : `**${driver.userName}**`;
+
+    return createEmbed(
+        'error',
+        'Rangdegradierung',
+        `${who} wurde zurückgestuft.\n\n` +
+        `**${fromRank}** ➜ **${toRank}**\n\n` +
+        'Der aktuelle SpedV-Rang wurde übernommen.'
+    );
+}
+
+/**
+ * Erstellt eine Ankündigung für die Entbindung von einer Funktion
+ * und die anschließende Betrauung mit der neuen Funktion.
  *
- * Ausschließlich die vier regulären Fahrerränge werden
- * berücksichtigt. Leitungs- und Funktionsränge werden ignoriert.
+ * Das ist keine automatische Fahrerbeförderung.
+ */
+function buildFunctionChange(driver, fromRank, toRank, discordId) {
+    const who = discordId
+        ? `<@${discordId}>`
+        : `**${driver.userName}**`;
+
+    const oldRank = canonicalRankName(fromRank) ?? fromRank;
+    const newRank = canonicalRankName(toRank) ?? toRank;
+
+    return createEmbed(
+        'info',
+        'Funktionswechsel und neue Betrauung',
+        `${who} erhält eine neue Funktion beziehungsweise Rangzuordnung.\n\n` +
+        `**Bisherige Funktion / bisheriger Rang:** ${oldRank}\n` +
+        `**Neue Funktion / neuer Rang:** ${newRank}\n\n` +
+        `Die bisherige Funktion **${oldRank}** wird beendet. ` +
+        `Die neue Funktion **${newRank}** wird übernommen.\n\n` +
+        'Maßgeblich ist der in SpedV hinterlegte Rang.'
+    );
+}
+
+/**
+ * Erstellt eine allgemeine Rangwechsel-Ankündigung, wenn mindestens
+ * ein Rang unbekannt ist. Unbekannte Werte werden nicht als Aufstieg
+ * oder Degradierung fehlinterpretiert.
+ */
+function buildUnknownRankChange(driver, fromRank, toRank, discordId) {
+    const who = discordId
+        ? `<@${discordId}>`
+        : `**${driver.userName}**`;
+
+    return createEmbed(
+        'info',
+        'Rangänderung in SpedV',
+        `${who} hat eine Rangänderung erhalten.\n\n` +
+        `**Vorher:** ${fromRank}\n` +
+        `**Nachher:** ${toRank}\n\n` +
+        'Die Änderung wurde erkannt, konnte aber nicht sicher als ' +
+        'Beförderung, Degradierung oder Funktionswechsel eingeordnet werden. ' +
+        'Bitte die Rangbezeichnungen und die Bot-Konfiguration prüfen.'
+    );
+}
+
+/**
+ * Versendet eine Rangwechsel-Ankündigung.
+ * Erwähnt ausschließlich den verknüpften Discord-Benutzer.
+ */
+async function announceRankChange(channel, driver, previousRank, newRank, links) {
+    const discordId = getDiscordId(links, driver.userName);
+
+    const previousIsDriver = isDriverRank(previousRank);
+    const newIsDriver = isDriverRank(newRank);
+
+    let embed;
+
+    if (previousIsDriver && newIsDriver) {
+        const fromIndex = driverRankIndex(previousRank);
+        const toIndex = driverRankIndex(newRank);
+
+        if (toIndex > fromIndex) {
+            embed = buildPromotion(
+                driver,
+                previousRank,
+                newRank,
+                discordId
+            );
+        } else if (toIndex < fromIndex) {
+            embed = buildDemotion(
+                driver,
+                previousRank,
+                newRank,
+                discordId
+            );
+        } else {
+            return;
+        }
+    } else if (
+        canonicalRankName(previousRank) &&
+        canonicalRankName(newRank)
+    ) {
+        // Sobald ein Funktionsrang beteiligt ist, wird die Änderung
+        // als Funktionswechsel/neue Betrauung kommuniziert.
+        embed = buildFunctionChange(
+            driver,
+            previousRank,
+            newRank,
+            discordId
+        );
+    } else {
+        embed = buildUnknownRankChange(
+            driver,
+            previousRank,
+            newRank,
+            discordId
+        );
+    }
+
+    await channel.send({
+        embeds: [embed],
+        allowedMentions: {
+            users: discordId ? [discordId] : [],
+            roles: [],
+        },
+    });
+}
+
+/**
+ * Prüft Empfehlungen für reguläre Fahrerbeförderungen.
+ *
+ * Funktionsränge werden hier ausdrücklich nicht berücksichtigt.
+ * Diese Empfehlungen lösen keine automatische Beförderung in SpedV aus.
  */
 async function proposeCandidates(guild, active, next) {
     const channelId = process.env.ETS_LEADER_CHANNEL_ID;
 
     if (!channelId) return;
 
-    const channel = await guild.channels
-        .fetch(channelId)
-        .catch(() => null);
+    const channel = await guild.channels.fetch(channelId).catch(() => null);
 
     if (!channel?.isTextBased()) {
         logger.warn(
@@ -188,8 +380,6 @@ async function proposeCandidates(guild, active, next) {
         return;
     }
 
-    // Nur ein ausdrücklich als leader markierter Fahrerrang darf
-    // hier als Ping-Ziel dienen. Funktionsränge sind ausgeschlossen.
     const leaderRank = DRIVER_RANKS.find(rank => rank.leader);
     const leaderRoleId = leaderRank
         ? getRankRoleId(guild.id, leaderRank)
@@ -202,14 +392,12 @@ async function proposeCandidates(guild, active, next) {
 
         const index = driverRankIndex(driver.rank?.name);
 
-        // Unbekannte Ränge und Funktionsränge überspringen.
         if (index === -1) continue;
 
         const current = DRIVER_RANKS[index];
         const target = DRIVER_RANKS[index + 1];
         const criteria = current?.promotion;
 
-        // Kein Folgerang oder keine Beförderungskriterien.
         if (!criteria || !target) continue;
 
         const joined = parseDate(driver.joinDate);
@@ -249,14 +437,10 @@ async function proposeCandidates(guild, active, next) {
 
         try {
             await channel.send({
-                content: leaderRoleId
-                    ? `<@&${leaderRoleId}>`
-                    : undefined,
-
+                content: leaderRoleId ? `<@&${leaderRoleId}>` : undefined,
                 allowedMentions: {
                     roles: leaderRoleId ? [leaderRoleId] : [],
                 },
-
                 embeds: [
                     createEmbed(
                         'info',
@@ -267,7 +451,7 @@ async function proposeCandidates(guild, active, next) {
                         `(min. ${criteria.minDays})\n` +
                         `• Gefahrene Kilometer: **${Math.round(km).toLocaleString('de-DE')} km** ` +
                         `(min. ${criteria.minKm.toLocaleString('de-DE')})\n\n` +
-                        'Bitte prüfen und bei Zustimmung in **SpedV** ' +
+                        'Bitte prüfen und bei Zustimmung in SpedV ' +
                         'befördern. Die Discord-Rolle folgt automatisch.'
                     ),
                 ],
@@ -288,8 +472,16 @@ async function proposeCandidates(guild, active, next) {
 }
 
 /**
- * Erkennt Rangwechsel in SpedV und verkündet ausschließlich
- * Beförderungen innerhalb der regulären Fahrer-Rangfolge.
+ * Erkennt Rangänderungen anhand des gespeicherten SpedV-Stands.
+ *
+ * Erster Lauf:
+ * - speichert den aktuellen Stand
+ * - erzeugt keine rückwirkenden Ankündigungen
+ *
+ * Folgeaufrufe:
+ * - Fahrer-Rang höher: Beförderung
+ * - Fahrer-Rang niedriger: Degradierung
+ * - Funktionsrang beteiligt: Funktionswechsel / neue Betrauung
  *
  * @param {import('discord.js').Guild} guild
  * @param {Array} users Normalisierte Fahrerliste aus fetchUsers().
@@ -326,7 +518,6 @@ async function checkPromotions(guild, users) {
 
     const state = loadState();
 
-    // Erster Lauf: aktuellen Stand merken, nichts verkünden.
     if (!state) {
         saveState({
             drivers: snapshot(),
@@ -340,16 +531,15 @@ async function checkPromotions(guild, users) {
         return;
     }
 
-    const channel = await guild.channels
-        .fetch(channelId)
-        .catch(() => null);
+    const channel = await guild.channels.fetch(channelId).catch(() => null);
 
     if (!channel?.isTextBased()) {
         logger.warn(
             'Promotion: Channel nicht gefunden oder kein Textkanal'
         );
 
-        // Alten Stand behalten, damit nichts verloren geht.
+        // Ohne erreichbaren Kanal keinen neuen Stand speichern:
+        // Rangänderungen bleiben beim nächsten Lauf erkennbar.
         return;
     }
 
@@ -360,7 +550,6 @@ async function checkPromotions(guild, users) {
         proposed: {},
     };
 
-    // Empfehlungen nur für weiterhin aktive Fahrer übernehmen.
     for (const user of active) {
         const id = String(user.id);
 
@@ -379,59 +568,31 @@ async function checkPromotions(guild, users) {
         if (
             previous?.rank &&
             rankName &&
-            norm(previous.rank) !== norm(rankName)
+            normalizedRankName(previous.rank) !== normalizedRankName(rankName)
         ) {
-            // Ein Rangwechsel beendet die bisherige Empfehlungsrunde.
+            // Bei jeder Rangänderung beginnt die Empfehlungsrunde neu.
             delete next.proposed[id];
 
-            const fromIndex = driverRankIndex(previous.rank);
-            const toIndex = driverRankIndex(rankName);
+            try {
+                await announceRankChange(
+                    channel,
+                    driver,
+                    previous.rank,
+                    rankName,
+                    links
+                );
 
-            // Nur Wechsel zwischen bekannten Fahrerrängen können
-            // eine reguläre Beförderungsankündigung auslösen.
-            if (
-                fromIndex !== -1 &&
-                toIndex !== -1 &&
-                toIndex > fromIndex
-            ) {
-                try {
-                    const discordId =
-                        links[norm(driver.userName)] ?? null;
-
-                    await channel.send({
-                        embeds: [
-                            buildPromotion(
-                                driver,
-                                previous.rank,
-                                rankName,
-                                discordId
-                            ),
-                        ],
-
-                        allowedMentions: {
-                            users: discordId ? [discordId] : [],
-                        },
-                    });
-
-                    logger.info(
-                        `Promotion: ${driver.userName} ` +
-                        `${previous.rank} -> ${rankName} verkündet`
-                    );
-                } catch (err) {
-                    // Alten Stand behalten, damit der nächste Lauf
-                    // die fehlgeschlagene Ankündigung erneut versucht.
-                    handled = false;
-
-                    logger.error(
-                        `Promotion: Verkünden für ${driver.userName} fehlgeschlagen`,
-                        err
-                    );
-                }
-            } else {
                 logger.info(
-                    `Promotion: ${driver.userName} ` +
-                    `${previous.rank} -> ${rankName} ` +
-                    '(keine reguläre Fahrerbeförderung)'
+                    `Promotion: Rangänderung für ${driver.userName}: ` +
+                    `${previous.rank} -> ${rankName} verkündet`
+                );
+            } catch (err) {
+                handled = false;
+
+                logger.error(
+                    `Promotion: Ankündigung für ${driver.userName} ` +
+                    'fehlgeschlagen; erneuter Versuch beim nächsten Lauf',
+                    err
                 );
             }
         }

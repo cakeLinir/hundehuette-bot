@@ -32,6 +32,22 @@ function describeError(err) {
     return `Unbekannter Fehler (siehe Log${err.code ? `, Code ${err.code}` : ''}).`;
 }
 
+function getRoleColorOptions(definition) {
+    const color = definition.color;
+
+    if (color === undefined || color === null) {
+        return {};
+    }
+
+    // discord.js 14.27.0 erwartet für Rollenfarben
+    // die neue colors-Option statt color.
+    return {
+        colors: {
+            primaryColor: color,
+        },
+    };
+}
+
 async function setupRoles({
     guild,
     definitions,
@@ -40,12 +56,11 @@ async function setupRoles({
     lines,
     reason,
 }) {
-    // Umgekehrte Reihenfolge: neu angelegte Rollen werden so
-    // in der gewünschten Reihenfolge untereinander einsortiert.
+    // Umgekehrte Reihenfolge für die Einrichtung der Rollen.
     for (const definition of [...definitions].reverse()) {
         const options = {
             name: definition.role,
-            color: definition.color,
+            ...getRoleColorOptions(definition),
             hoist: true,
             mentionable: false,
             reason,
@@ -56,11 +71,13 @@ async function setupRoles({
                 guild.roles.cache.get(savedRoles[definition.key]) ||
                 (
                     definition.env
-                        ? guild.roles.cache.get(process.env[definition.env])
+                        ? guild.roles.cache.get(
+                            process.env[definition.env],
+                        )
                         : null
                 ) ||
                 guild.roles.cache.find(
-                    candidate => candidate.name === definition.role
+                    candidate => candidate.name === definition.role,
                 );
 
             if (role) {
@@ -71,6 +88,7 @@ async function setupRoles({
                     ...options,
                     permissions: definition.permissions ?? [],
                 });
+
                 lines.push(`✅ ${role} erstellt`);
             }
 
@@ -82,7 +100,7 @@ async function setupRoles({
             );
 
             lines.push(
-                `❌ **${definition.role}**: ${describeError(err)}`
+                `❌ **${definition.role}**: ${describeError(err)}`,
             );
         }
     }
@@ -92,10 +110,10 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('ets-rollen')
         .setDescription(
-            'Erstellt oder aktualisiert Fahrer-Ränge und Funktionsrollen der Spedition'
+            'Erstellt oder aktualisiert Fahrer-Ränge und Funktionsrollen der Spedition',
         )
         .setDefaultMemberPermissions(
-            PermissionFlagsBits.Administrator
+            PermissionFlagsBits.Administrator,
         ),
 
     async execute(interaction) {
@@ -109,7 +127,7 @@ module.exports = {
             return interaction.editReply({
                 embeds: [
                     createErrorEmbed(
-                        'Dieser Befehl kann nur auf einem Discord-Server verwendet werden.'
+                        'Dieser Befehl kann nur auf einem Discord-Server verwendet werden.',
                     ),
                 ],
             });
@@ -120,7 +138,7 @@ module.exports = {
 
             const settings = getGuildSettings(guild.id);
 
-            // Getrennte Konfigurationen. Vorhandene IDs bleiben erhalten.
+            // Vorhandene Rollen-IDs und Einstellungen beibehalten.
             const savedRankRoles = {
                 ...(settings.etsRankRoles ?? {}),
             };
@@ -149,14 +167,15 @@ module.exports = {
                 reason: 'Spedition: Funktionsrollen eingerichtet',
             });
 
-            // Beide Maps gemeinsam speichern, ohne andere
-            // Guild-Einstellungen zu überschreiben.
+            // Beide Zuordnungen gemeinsam speichern.
             setGuildSettings(guild.id, {
                 etsRankRoles: savedRankRoles,
                 etsPositionRoles: savedPositionRoles,
             });
 
-            const failed = lines.some(line => line.startsWith('❌'));
+            const failed = lines.some(
+                line => line.startsWith('❌'),
+            );
 
             const summary = [
                 '**Fahrerränge**',
@@ -164,6 +183,7 @@ module.exports = {
                     .reverse()
                     .map(rank => {
                         const roleId = savedRankRoles[rank.key];
+
                         return roleId
                             ? `• <@&${roleId}>`
                             : `• ❌ ${rank.role}: keine Rollen-ID gespeichert`;
@@ -173,7 +193,9 @@ module.exports = {
                 ...[...POSITIONS]
                     .reverse()
                     .map(position => {
-                        const roleId = savedPositionRoles[position.key];
+                        const roleId =
+                            savedPositionRoles[position.key];
+
                         return roleId
                             ? `• <@&${roleId}>`
                             : `• ❌ ${position.role}: keine Rollen-ID gespeichert`;
@@ -196,12 +218,15 @@ module.exports = {
                 ],
             });
         } catch (err) {
-            logger.error('ets-rollen: Einrichtung fehlgeschlagen', err);
+            logger.error(
+                'ets-rollen: Einrichtung fehlgeschlagen',
+                err,
+            );
 
             return interaction.editReply({
                 embeds: [
                     createErrorEmbed(
-                        'Die Rolleneinrichtung konnte nicht vollständig ausgeführt werden. Bitte prüfe das Bot-Log.'
+                        'Die Rolleneinrichtung konnte nicht vollständig ausgeführt werden. Bitte prüfe das Bot-Log.',
                     ),
                 ],
             });

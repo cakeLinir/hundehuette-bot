@@ -1,0 +1,17 @@
+{
+  "mode": "offline-dry-run",
+  "velocityUnit": "kmh",
+  "fields": {
+    "taskId": "ID",
+    "state": "State",
+    "completedAt": "Endtime",
+    "taskUserId": "UserID",
+    "taskUserName": "User.UserName",
+    "taskMaxVelocity": "MaxVelocityKMH",
+    "velocity": "Velocity",
+    "cleaned": "DDCleaned"
+  },
+  "settledState": 2,
+  "speedLimitKmh": 95,
+  "finePerKmhEur": 100
+}

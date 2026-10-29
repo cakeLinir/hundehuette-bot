@@ -1,0 +1,29 @@
+{
+  "tasks": [
+    {
+      "ID": 123456,
+      "UserID": 169742,
+      "State": 2,
+      "Endtime": "2026-10-12T18:30:00Z",
+      "MaxVelocityKMH": 108,
+      "DDCleaned": false,
+      "User": {
+        "ID": 169742,
+        "UserName": "example-own-user"
+      }
+    }
+  ],
+  "links": {
+    "example-own-user": "REPLACE_WITH_LINKED_DISCORD_ID"
+  },
+  "driveDataByTaskId": {
+    "123456": [
+      {
+        "ID": 1,
+        "Timestamp": "2026-10-12T18:00:00Z",
+        "Velocity": 108,
+        "SpeedLimit": 80
+      }
+    ]
+  }
+}

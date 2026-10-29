@@ -46,13 +46,37 @@ function loadCommandData() {
             { body: commands }
         );
 
-        // 3. Erst nach erfolgreicher globaler Registrierung alte Guild-Commands entfernen.
-        console.log('Entferne alte Guild-Commands...');
-        await rest.put(
-            Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
-            { body: [] }
+        // 3. Nur Guild-Commands entfernen, die jetzt global registriert sind.
+        // Andere Guild-spezifische Commands bleiben erhalten.
+        console.log('Prüfe vorhandene Guild-Commands...');
+
+        const globalNames = new Set(commands.map(command => command.name));
+
+        const guildRoute = Routes.applicationGuildCommands(
+            process.env.CLIENT_ID,
+            process.env.GUILD_ID
         );
 
+        const existingGuildCommands = await rest.get(guildRoute);
+
+        const preservedGuildCommands = existingGuildCommands.filter(
+            command => !globalNames.has(command.name)
+        );
+
+        const removedNames = existingGuildCommands
+            .filter(command => globalNames.has(command.name))
+            .map(command => command.name);
+
+        console.log(`Erhaltene Guild-Commands: ${preservedGuildCommands.length}`);
+        console.log(`Entfernte doppelte Guild-Commands: ${removedNames.length}`);
+
+        if (removedNames.length > 0) {
+            console.log(`Bereinigung: ${removedNames.join(', ')}`);
+        }
+
+        if (removedNames.length > 0) {
+            await rest.put(guildRoute, { body: preservedGuildCommands });
+        }
         console.log('✅ Slash-Befehle erfolgreich registriert!');
 
         // Command-Dateien können Timer oder Server starten: Prozess explizit beenden

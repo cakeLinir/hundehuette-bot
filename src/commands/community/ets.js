@@ -1,21 +1,45 @@
-const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const { createEmbed, createErrorEmbed } = require('../../utils/embedBuilder');
+
+const {
+    SlashCommandBuilder,
+    MessageFlags,
+} = require('discord.js');
+
+const {
+    createEmbed,
+    createErrorEmbed,
+} = require('../../utils/embedBuilder');
+
 const { isModuleEnabled } = require('../../utils/moduleManager');
 const logger = require('../../utils/logger');
+
 const {
-    fetchUsers, findDriver, isRankAllowed, fetchAboutMe, getLinkOwner, setLink,
+    fetchUsers,
+    findDriver,
+    isRankAllowed,
+    fetchAboutMe,
+    getLinkOwner,
+    setLink,
 } = require('../../utils/spedvApi');
+
 const {
-    getPending, createPending, clearPending, codeInText, TTL_MS,
+    getPending,
+    createPending,
+    clearPending,
+    codeInText,
+    TTL_MS,
 } = require('../../utils/etsVerification');
+
 const { applyRoles } = require('../../utils/spedvRoleSync');
 
 const COOLDOWN_MS = 15_000;
 const lastUse = new Map();
 
 const norm = v => String(v ?? '').trim().toLowerCase();
+
 const fail = (interaction, text) =>
-    interaction.editReply({ embeds: [createErrorEmbed(text)] });
+    interaction.editReply({
+        embeds: [createErrorEmbed(text)],
+    });
 
 async function grantRoles(interaction, driver) {
     try {
@@ -31,11 +55,18 @@ async function grantRoles(interaction, driver) {
 
         return interaction.editReply({
             embeds: [
-                createEmbed('success', '🚚 Willkommen im Fuhrpark!', text),
+                createEmbed(
+                    'success',
+                    '🚚 Willkommen im Fuhrpark!',
+                    text
+                ),
             ],
         });
     } catch (err) {
-        logger.error('ETS: Rollen konnten nicht vergeben werden', err);
+        logger.error(
+            'ETS: Rollen konnten nicht vergeben werden',
+            err
+        );
 
         return fail(
             interaction,
@@ -91,8 +122,6 @@ async function verifySpedvName(interaction) {
 
     lastUse.set(interaction.user.id, Date.now());
 
-    // Direkte Pflichtoption von /ets:
-    // /ets spedv-name:<name>
     const givenName = interaction.options
         .getString('spedv-name', true)
         .trim();
@@ -107,9 +136,15 @@ async function verifySpedvName(interaction) {
     let driver;
 
     try {
-        driver = findDriver(await fetchUsers(), [givenName]);
+        driver = findDriver(
+            await fetchUsers(),
+            [givenName]
+        );
     } catch (err) {
-        logger.error('ETS: SpedV-Abfrage fehlgeschlagen', err);
+        logger.error(
+            'ETS: SpedV-Abfrage fehlgeschlagen',
+            err
+        );
 
         return fail(
             interaction,
@@ -131,7 +166,6 @@ async function verifySpedvName(interaction) {
         );
     }
 
-    // Bereits verifiziert? Dann nur Rollen abgleichen.
     const owner = getLinkOwner(driver.userName);
 
     if (owner && owner !== interaction.user.id) {
@@ -166,7 +200,7 @@ async function verifySpedvName(interaction) {
                     `1. Trage diesen Code in SpedV im Profil unter **Über mich** ein:\n` +
                     `**\`${created.code}\`**\n` +
                     `2. Speichere das Profil.\n` +
-                    `3. Führe danach erneut **/ets** aus und gib denselben SpedV-Namen an.\n\n` +
+                    `3. Führe danach erneut **/ets link** aus und gib denselben SpedV-Namen an.\n\n` +
                     `Der Code ist ${TTL_MS / 60_000} Minuten gültig. Nach der Bestätigung kannst du ihn wieder löschen.`
                 ),
             ],
@@ -178,7 +212,10 @@ async function verifySpedvName(interaction) {
     try {
         aboutMe = await fetchAboutMe(driver.id);
     } catch (err) {
-        logger.error('ETS: Profil konnte nicht gelesen werden', err);
+        logger.error(
+            'ETS: Profil konnte nicht gelesen werden',
+            err
+        );
 
         return fail(
             interaction,
@@ -190,7 +227,7 @@ async function verifySpedvName(interaction) {
         return fail(
             interaction,
             `Ich finde den Code noch nicht in deinem Profil.\n` +
-            `Trage **\`${pending.code}\`** unter **Über mich** ein, speichere und führe **/ets** mit deinem SpedV-Namen erneut aus.`
+            `Trage **\`${pending.code}\`** unter **Über mich** ein, speichere und führe **/ets link** mit deinem SpedV-Namen erneut aus.`
         );
     }
 
@@ -200,18 +237,123 @@ async function verifySpedvName(interaction) {
     return grantRoles(interaction, driver);
 }
 
+/**
+ * Vorläufige Platzhalter für die Abrechnungsbefehle.
+ * Hier werden noch keine Rechnungen gelesen oder verändert.
+ */
+async function handleBillingPlaceholder(interaction) {
+    await interaction.deferReply({
+        flags: MessageFlags.Ephemeral,
+    });
+
+    const subcommand = interaction.options.getSubcommand();
+
+    const messages = {
+        vorschau:
+            'Die Rechnungsübersicht ist noch nicht freigeschaltet.',
+
+        senden:
+            'Der Rechnungsversand ist noch nicht freigeschaltet. Es wurde keine Nachricht versendet.',
+
+        status:
+            'Die Rechnungsstatus-Abfrage ist noch nicht freigeschaltet.',
+    };
+
+    return interaction.editReply({
+        embeds: [
+            createEmbed(
+                'info',
+                'Buchhaltung – Vorbereitung',
+                messages[subcommand] ??
+                    'Dieser Abrechnungsbefehl ist noch nicht verfügbar.'
+            ),
+        ],
+    });
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('ets')
         .setDescription('ETS2/ATS- und SpedV-Funktionen')
-        .addStringOption(option =>
-            option
-                .setName('spedv-name')
-                .setDescription('Dein exakter SpedV-Name')
-                .setRequired(true)
+
+        // SpedV-Verknüpfung
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('link')
+                .setDescription('Verknüpfe deinen Discord-Account mit SpedV')
+                .addStringOption(option =>
+                    option
+                        .setName('spedv-name')
+                        .setDescription('Dein exakter SpedV-Name')
+                        .setRequired(true)
+                )
+        )
+
+        // Abrechnungsfunktionen
+        .addSubcommandGroup(group =>
+            group
+                .setName('abrechnung')
+                .setDescription('Monatliche Fahrerabrechnungen')
+
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName('vorschau')
+                        .setDescription('Zeigt die vorbereiteten Monatsrechnungen')
+                        .addStringOption(option =>
+                            option
+                                .setName('monat')
+                                .setDescription('Abrechnungsmonat im Format YYYY-MM')
+                                .setRequired(true)
+                        )
+                )
+
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName('senden')
+                        .setDescription('Sendet eine Monatsrechnung nach Bestätigung')
+                        .addStringOption(option =>
+                            option
+                                .setName('rechnung-id')
+                                .setDescription('Eindeutige ID der Monatsrechnung')
+                                .setRequired(true)
+                        )
+                )
+
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName('status')
+                        .setDescription('Zeigt den Status einer Fahrerabrechnung')
+                        .addUserOption(option =>
+                            option
+                                .setName('fahrer')
+                                .setDescription('Discord-Mitglied des Fahrers')
+                                .setRequired(false)
+                        )
+                )
         ),
 
     async execute(interaction) {
-        return verifySpedvName(interaction);
+        const subcommandGroup =
+            interaction.options.getSubcommandGroup(false);
+
+        const subcommand =
+            interaction.options.getSubcommand(false);
+
+        if (subcommandGroup === 'abrechnung') {
+            return handleBillingPlaceholder(interaction);
+        }
+
+        if (subcommand === 'link') {
+            return verifySpedvName(interaction);
+        }
+
+        return interaction.reply({
+            embeds: [
+                createErrorEmbed(
+                    'Dieser ETS-Befehl ist nicht bekannt.'
+                ),
+            ],
+            flags: MessageFlags.Ephemeral,
+        });
     },
 };

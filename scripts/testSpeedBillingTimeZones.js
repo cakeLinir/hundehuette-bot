@@ -44,7 +44,7 @@ const cases = [
     },
 ];
 
-function createTestInvoice(index, attemptedAt) {
+function createTestInvoice(index, attemptedAt, deliveryResult = 'delivered') {
     const guildId = `test-guild-${index}`;
     const discordUserId = `test-driver-${index}`;
 
@@ -70,7 +70,12 @@ function createTestInvoice(index, attemptedAt) {
     store.recordInvoiceSendAttempt(
         invoiceId,
         attemptedAt,
-        'delivered'
+        'pending'
+    );
+
+    store.recordInvoiceDeliveryResult(
+        invoiceId,
+        deliveryResult
     );
 
     return invoiceId;
@@ -81,6 +86,7 @@ try {
 
     for (let i = 0; i < cases.length; i += 1) {
         const testCase = cases[i];
+
         const invoiceId = createTestInvoice(
             i + 1,
             testCase.attemptedAt
@@ -115,21 +121,38 @@ try {
     }
 
     // Wiederholter Versand darf die ursprüngliche Frist nicht ändern.
+    // Die Rechnung wird zunächst mit fehlgeschlagener Zustellung erstellt.
     const retryInvoiceId = createTestInvoice(
         99,
-        '2026-11-01T10:00:00.000Z'
+        '2026-11-01T10:00:00.000Z',
+        'failed'
     );
 
     const beforeRetry = store.listInvoices().find(
         item => item.id === retryInvoiceId
     );
 
+    assert.ok(beforeRetry, 'Rechnung für Wiederholungsversand fehlt');
+
+    assert.equal(
+        beforeRetry.delivery,
+        'failed',
+        'Erster Zustellversuch muss fehlgeschlagen sein'
+    );
+
     const originalSendAttemptAt = beforeRetry.sendAttemptAt;
     const originalDueAt = beforeRetry.dueAt;
 
+    // Erneuter Versand nach fehlgeschlagener Zustellung.
     store.recordInvoiceSendAttempt(
         retryInvoiceId,
         '2026-11-05T10:00:00.000Z',
+        'pending'
+    );
+
+    // Erneute Zustellung ist erfolgreich.
+    store.recordInvoiceDeliveryResult(
+        retryInvoiceId,
         'delivered'
     );
 
@@ -137,12 +160,29 @@ try {
         item => item.id === retryInvoiceId
     );
 
-    assert.equal(afterRetry.sendAttemptAt, originalSendAttemptAt);
-    assert.equal(afterRetry.dueAt, originalDueAt);
+    assert.ok(afterRetry, 'Rechnung nach Wiederholungsversand fehlt');
+
+    assert.equal(
+        afterRetry.delivery,
+        'delivered',
+        'Erneuter Zustellversuch muss erfolgreich sein'
+    );
+
+    assert.equal(
+        afterRetry.sendAttemptAt,
+        originalSendAttemptAt,
+        'Ursprünglicher Versandzeitpunkt darf sich nicht ändern'
+    );
+
+    assert.equal(
+        afterRetry.dueAt,
+        originalDueAt,
+        'Ursprüngliche Zahlungsfrist darf sich nicht ändern'
+    );
 
     console.log('OK: Wiederholter Versand verändert die Frist nicht');
 
-    // Überfällig erst nach Ablauf des exakten Fälligkeitszeitpunkts.
+    // Überfälligkeit erst nach Ablauf des exakten Fälligkeitszeitpunkts.
     const dueAt = new Date(originalDueAt);
 
     const overdueBefore = store.listOverdueInvoices(

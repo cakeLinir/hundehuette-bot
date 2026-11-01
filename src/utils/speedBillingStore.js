@@ -1121,7 +1121,7 @@ function addBerlinCalendarDays(date, days) {
 function recordInvoiceSendAttempt(
     invoiceId,
     attemptedAt,
-    delivery = 'unknown',
+    delivery = 'pending',
     actorDiscordId = null
 ) {
     const data = readStore();
@@ -1132,9 +1132,26 @@ function recordInvoiceSendAttempt(
         throw new Error(`Rechnung nicht gefunden: ${id}`);
     }
 
+    const isFirstAttempt = invoice.status === 'draft';
+    const isRetry =
+        invoice.status === 'sent' &&
+        invoice.delivery === 'failed';
+
     if (invoice.status === 'paid') {
         throw new Error(
             'Eine bezahlte Rechnung kann nicht erneut versendet werden.'
+        );
+    }
+
+    if (!isFirstAttempt && !isRetry) {
+        throw new Error(
+            'Ein Versand ist nur bei Entwurf oder nach einem fehlgeschlagenen Zustellversuch erlaubt.'
+        );
+    }
+
+    if (delivery !== 'pending') {
+        throw new Error(
+            'Ein Versandversuch muss zunächst mit dem Status pending gespeichert werden.'
         );
     }
 
@@ -1143,16 +1160,19 @@ function recordInvoiceSendAttempt(
         'Versandzeitpunkt'
     );
 
-    const normalizedDelivery = [
-        'delivered',
-        'failed',
-        'pending',
-        'unknown',
-    ].includes(delivery)
-        ? delivery
-        : 'unknown';
-
     const firstAttempt = !invoice.sendAttemptAt;
+
+    if (isFirstAttempt && !firstAttempt) {
+        throw new Error(
+            'Ungültiger Rechnungszustand: Entwurf besitzt bereits einen Versandzeitpunkt.'
+        );
+    }
+
+    if (isRetry && firstAttempt) {
+        throw new Error(
+            'Ungültiger Rechnungszustand: Versandhistorie fehlt.'
+        );
+    }
 
     if (firstAttempt) {
         invoice.sendAttemptAt = attemptDate.toISOString();
@@ -1162,7 +1182,7 @@ function recordInvoiceSendAttempt(
         ).toISOString();
     }
 
-    invoice.delivery = normalizedDelivery;
+    invoice.delivery = 'pending';
     invoice.lastSendAttemptAt = attemptDate.toISOString();
     invoice.status = 'sent';
     invoice.updatedAt = attemptDate.toISOString();
@@ -1170,7 +1190,7 @@ function recordInvoiceSendAttempt(
     addAudit(data, 'invoice_send_attempt', actorDiscordId, {
         invoiceId: id,
         attemptedAt: attemptDate.toISOString(),
-        delivery: normalizedDelivery,
+        delivery: 'pending',
         firstAttempt,
     });
 
@@ -1191,17 +1211,25 @@ function recordInvoiceDeliveryResult(
     }
 
     const data = readStore();
-    const invoice = data.invoices[
-        requireText(invoiceId, 'Rechnungs-ID')
-    ];
+    const id = requireText(invoiceId, 'Rechnungs-ID');
+    const invoice = data.invoices[id];
 
     if (!invoice) {
         throw new Error('Rechnung nicht gefunden.');
     }
 
-    if (invoice.status !== 'sent' || !invoice.sendAttemptAt) {
+    if (
+        invoice.status !== 'sent' ||
+        !invoice.sendAttemptAt
+    ) {
         throw new Error(
             'Es wurde noch kein Versandversuch gespeichert.'
+        );
+    }
+
+    if (invoice.delivery !== 'pending') {
+        throw new Error(
+            'Für diese Rechnung ist kein offener Versandversuch vorhanden.'
         );
     }
 
@@ -1209,8 +1237,109 @@ function recordInvoiceDeliveryResult(
     invoice.updatedAt = new Date().toISOString();
 
     addAudit(data, 'invoice_delivery_result_recorded', actorDiscordId, {
-        invoiceId,
+        invoiceId: id,
         delivery,
+    });
+
+    writeStore(data);
+
+    return invoice;
+}
+
+function recordFallbackNotificationAttempt(
+    invoiceId,
+    channelId,
+    actorDiscordId = null
+) {
+    const data = readStore();
+    const id = requireText(invoiceId, 'Rechnungs-ID');
+    const channel = requireText(channelId, 'Fallback-Kanal-ID');
+    const invoice = data.invoices[id];
+
+    if (!invoice) {
+        throw new Error('Rechnung nicht gefunden.');
+    }
+
+    if (
+        invoice.status !== 'sent' ||
+        invoice.delivery !== 'failed'
+    ) {
+        throw new Error(
+            'Eine öffentliche Fallback-Benachrichtigung ist nur nach eindeutig fehlgeschlagener DM-Zustellung erlaubt.'
+        );
+    }
+
+    if (invoice.fallbackNotification) {
+        throw new Error(
+            'Für diese Rechnung existiert bereits ein Fallback-Versuch. Ein erneuter Post ist gesperrt.'
+        );
+    }
+
+    const now = new Date().toISOString();
+
+    invoice.fallbackNotification = {
+        status: 'pending',
+        channelId: channel,
+        messageId: null,
+        attemptedAt: now,
+        completedAt: null,
+        error: null,
+    };
+
+    invoice.updatedAt = now;
+
+    addAudit(data, 'invoice_fallback_notification_attempt', actorDiscordId, {
+        invoiceId: id,
+        channelId: channel,
+    });
+
+    writeStore(data);
+
+    return invoice;
+}
+
+function recordFallbackNotificationResult(
+    invoiceId,
+    status,
+    details = {},
+    actorDiscordId = null
+) {
+    if (!['sent', 'unknown'].includes(status)) {
+        throw new TypeError(
+            'Fallback-Ergebnis muss sent oder unknown sein.'
+        );
+    }
+
+    const data = readStore();
+    const id = requireText(invoiceId, 'Rechnungs-ID');
+    const invoice = data.invoices[id];
+
+    if (!invoice) {
+        throw new Error('Rechnung nicht gefunden.');
+    }
+
+    if (invoice.fallbackNotification?.status !== 'pending') {
+        throw new Error(
+            'Es existiert kein offener Fallback-Versuch.'
+        );
+    }
+
+    const now = new Date().toISOString();
+
+    invoice.fallbackNotification.status = status;
+    invoice.fallbackNotification.messageId =
+        optionalText(details.messageId);
+    invoice.fallbackNotification.completedAt = now;
+    invoice.fallbackNotification.error =
+        optionalText(details.error);
+
+    invoice.updatedAt = now;
+
+    addAudit(data, 'invoice_fallback_notification_result', actorDiscordId, {
+        invoiceId: id,
+        status,
+        channelId: invoice.fallbackNotification.channelId,
+        messageId: invoice.fallbackNotification.messageId,
     });
 
     writeStore(data);
@@ -1819,4 +1948,9 @@ module.exports = {
     listInvoices,
     listReviewCases,
     listOverdueInvoices,
+    recordFallbackNotificationAttempt: (...args) =>
+        withStoreLock(() => recordFallbackNotificationAttempt(...args)),
+
+    recordFallbackNotificationResult: (...args) =>
+        withStoreLock(() => recordFallbackNotificationResult(...args)),
 };

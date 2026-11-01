@@ -118,6 +118,24 @@ function setLink(spedvName, discordId) {
     writeFileAtomic.sync(linksPath, JSON.stringify(links, null, 2));
 }
 
+function getSpedvNamesByDiscordId(discordId) {
+    const targetId = String(discordId);
+    const links = loadLinks();
+
+    return Object.entries(links)
+        .filter(([, linkedDiscordId]) =>
+            String(linkedDiscordId) === targetId
+        )
+        .map(([spedvName]) => spedvName);
+}
+
 module.exports = {
-    fetchUsers, findDriver, isRankAllowed, fetchAboutMe, fetchStats, getLinkOwner, setLink,
+    fetchUsers,
+    findDriver,
+    isRankAllowed,
+    fetchAboutMe,
+    fetchStats,
+    getLinkOwner,
+    getSpedvNamesByDiscordId,
+    setLink,
 };

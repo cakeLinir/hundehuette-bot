@@ -1,4 +1,3 @@
-
 'use strict';
 
 const assert = require('node:assert/strict');
@@ -126,7 +125,6 @@ try {
     // 5a. Fahrer- und Monatstrennung vorbereiten
     // ============================================================
 
-    // Anderer Fahrer, gleicher Monat.
     const otherDriverJob = store.recordCompletedJob(
         {
             ...base,
@@ -140,7 +138,6 @@ try {
     assert.equal(otherDriverJob.created, true);
     assert.equal(otherDriverJob.job.billingMonth, '2026-11');
 
-    // Gleicher Fahrer, anderer Monat.
     const otherMonthJob = store.recordCompletedJob(
         {
             ...base,
@@ -250,7 +247,6 @@ try {
     assert.equal(attemptedChange.duplicate, true);
     assert.equal(attemptedChange.job.fineEur, 1300);
 
-
     // ============================================================
     // 7a. Nachträglicher Auftrag aktualisiert Rechnungsentwurf
     // ============================================================
@@ -296,7 +292,6 @@ try {
         true
     );
 
-    // Wiederholte Erfassung darf keine zweite Rechnungsposition erzeugen.
     const duplicateLateJob = store.recordCompletedJob(
         {
             ...base,
@@ -307,6 +302,7 @@ try {
     );
 
     assert.equal(duplicateLateJob.duplicate, true);
+
     assert.equal(
         store.listInvoices({
             guildId: 'guild-1',
@@ -317,23 +313,56 @@ try {
         3
     );
 
-
     // ============================================================
     // 8. Versandversuch und 14-Tage-Frist
     // ============================================================
 
     const sentAt = new Date('2026-12-01T12:00:00Z');
 
-    const sent = store.recordInvoiceSendAttempt(
+    const sentPending = store.recordInvoiceSendAttempt(
         invoiceResult.invoice.id,
         sentAt,
+        'pending',
+        'billing-staff'
+    );
+
+    assert.equal(sentPending.status, 'sent');
+    assert.equal(sentPending.delivery, 'pending');
+
+    // Ein paralleler bzw. zweiter Versand während pending
+    // muss vom Store verhindert werden.
+    assert.throws(
+        () => store.recordInvoiceSendAttempt(
+            invoiceResult.invoice.id,
+            new Date('2026-12-01T12:01:00Z'),
+            'pending',
+            'billing-staff'
+        ),
+        /Versand|Zustellversuch|Entwurf|fehlgeschlagen/i
+    );
+
+    const sent = store.recordInvoiceDeliveryResult(
+        invoiceResult.invoice.id,
         'failed',
         'billing-staff'
     );
 
     assert.equal(sent.status, 'sent');
+    assert.equal(sent.delivery, 'failed');
 
-    // Nachträglicher Auftrag darf eine versendete Rechnung nicht verändern.
+    // Ein zweites Zustellergebnis darf den abgeschlossenen
+    // Versandversuch nicht überschreiben.
+    assert.throws(
+        () => store.recordInvoiceDeliveryResult(
+            invoiceResult.invoice.id,
+            'delivered',
+            'billing-staff'
+        ),
+        /offener Versandversuch/
+    );
+
+    // Nachträglicher Auftrag darf eine versendete Rechnung
+    // nicht verändern.
     const sentInvoiceBeforeLateJob = store.listInvoices({
         guildId: 'guild-1',
         month: '2026-11',
@@ -352,6 +381,7 @@ try {
     assert.equal(sentLateJob.job.status, 'fine_assessed');
     assert.equal(sentLateJob.job.invoiceId, null);
     assert.equal(sentLateJob.job.billingFollowUp.status, 'open');
+
     assert.equal(
         sentLateJob.job.billingFollowUp.invoiceId,
         invoiceResult.invoice.id
@@ -366,6 +396,7 @@ try {
         sentInvoiceAfterLateJob,
         sentInvoiceBeforeLateJob
     );
+
     assert.equal(
         sent.dueAt,
         new Date(
@@ -382,9 +413,19 @@ try {
 
     const retryAt = new Date('2026-12-05T12:00:00Z');
 
-    const retried = store.recordInvoiceSendAttempt(
+    const retryPending = store.recordInvoiceSendAttempt(
         invoiceResult.invoice.id,
         retryAt,
+        'pending',
+        'billing-staff'
+    );
+
+    assert.equal(retryPending.delivery, 'pending');
+    assert.equal(retryPending.sendAttemptAt, originalAttempt);
+    assert.equal(retryPending.dueAt, originalDueAt);
+
+    const retried = store.recordInvoiceDeliveryResult(
+        invoiceResult.invoice.id,
         'delivered',
         'billing-staff'
     );
@@ -392,6 +433,65 @@ try {
     assert.equal(retried.sendAttemptAt, originalAttempt);
     assert.equal(retried.dueAt, originalDueAt);
     assert.equal(retried.delivery, 'delivered');
+
+    // Ein erneuter Versand nach erfolgreicher Zustellung
+    // muss gesperrt sein.
+    assert.throws(
+        () => store.recordInvoiceSendAttempt(
+            invoiceResult.invoice.id,
+            new Date('2026-12-06T12:00:00Z'),
+            'pending',
+            'billing-staff'
+        ),
+        /Versand|Zustellversuch|Entwurf|fehlgeschlagen/i
+    );
+
+    // ============================================================
+    // 9a. Unknown-Zustellung sperrt weitere Versandversuche
+    // ============================================================
+
+    const unknownDriver = 'discord-unknown';
+
+    store.recordCompletedJob(
+        {
+            ...base,
+            taskId: 'task-unknown-delivery',
+            discordUserId: unknownDriver,
+            maxVelocityKmh: 100,
+        },
+        'tester'
+    );
+
+    const unknownInvoiceResult = store.createMonthlyInvoice({
+        guildId: 'guild-1',
+        discordUserId: unknownDriver,
+        month: '2026-11',
+    });
+
+    assert.equal(unknownInvoiceResult.created, true);
+
+    store.recordInvoiceSendAttempt(
+        unknownInvoiceResult.invoice.id,
+        new Date('2026-12-01T13:00:00Z'),
+        'pending',
+        'billing-staff'
+    );
+
+    store.recordInvoiceDeliveryResult(
+        unknownInvoiceResult.invoice.id,
+        'unknown',
+        'billing-staff'
+    );
+
+    assert.throws(
+        () => store.recordInvoiceSendAttempt(
+            unknownInvoiceResult.invoice.id,
+            new Date('2026-12-02T13:00:00Z'),
+            'pending',
+            'billing-staff'
+        ),
+        /Versand|Zustellversuch|Entwurf|fehlgeschlagen/i
+    );
 
     // ============================================================
     // 10. Zahlungsbestätigung und Berechtigungen
@@ -416,8 +516,20 @@ try {
 
     assert.equal(paid.updated, true);
     assert.equal(paid.invoice.status, 'paid');
-    
-    // Nachträglicher Auftrag darf eine bezahlte Rechnung nicht verändern.
+
+    // Ein Versand nach Zahlung muss gesperrt sein.
+    assert.throws(
+        () => store.recordInvoiceSendAttempt(
+            invoiceResult.invoice.id,
+            new Date('2026-12-07T12:00:00Z'),
+            'pending',
+            'billing-staff'
+        ),
+        /bezahlte Rechnung/
+    );
+
+    // Nachträglicher Auftrag darf eine bezahlte Rechnung
+    // nicht verändern.
     const paidInvoiceBeforeLateJob = store.listInvoices({
         guildId: 'guild-1',
         month: '2026-11',
@@ -436,6 +548,7 @@ try {
     assert.equal(paidLateJob.job.status, 'fine_assessed');
     assert.equal(paidLateJob.job.invoiceId, null);
     assert.equal(paidLateJob.job.billingFollowUp.status, 'open');
+
     assert.equal(
         paidLateJob.job.billingFollowUp.invoiceId,
         invoiceResult.invoice.id
@@ -491,6 +604,12 @@ try {
     store.recordInvoiceSendAttempt(
         sentBatchInvoiceId,
         new Date('2026-12-01T12:00:00Z'),
+        'pending',
+        'billing-staff'
+    );
+
+    store.recordInvoiceDeliveryResult(
+        sentBatchInvoiceId,
         'delivered',
         'billing-staff'
     );
@@ -519,6 +638,7 @@ try {
 
     assert.equal(sentBatchResult.failedCount, 0);
     assert.equal(sentBatchResult.createdCount, 1);
+
     assert.equal(
         sentBatchResult.results[0].invoiceReconciliation.action,
         'manual_follow_up'
@@ -531,6 +651,7 @@ try {
     assert.equal(sentBatchLateJob.status, 'fine_assessed');
     assert.equal(sentBatchLateJob.invoiceId, null);
     assert.equal(sentBatchLateJob.billingFollowUp.status, 'open');
+
     assert.equal(
         sentBatchLateJob.billingFollowUp.invoiceId,
         sentBatchInvoiceId
@@ -583,9 +704,17 @@ try {
 
     const paidBatchInvoiceId = paidBatchInvoiceResult.invoice.id;
 
+    // KORREKTUR:
+    // Hier muss paidBatchInvoiceId verwendet werden.
     store.recordInvoiceSendAttempt(
         paidBatchInvoiceId,
         new Date('2026-12-01T12:00:00Z'),
+        'pending',
+        'billing-staff'
+    );
+
+    store.recordInvoiceDeliveryResult(
+        paidBatchInvoiceId,
         'delivered',
         'billing-staff'
     );
@@ -621,6 +750,7 @@ try {
 
     assert.equal(paidBatchResult.failedCount, 0);
     assert.equal(paidBatchResult.createdCount, 1);
+
     assert.equal(
         paidBatchResult.results[0].invoiceReconciliation.action,
         'manual_follow_up'
@@ -633,6 +763,7 @@ try {
     assert.equal(paidBatchLateJob.status, 'fine_assessed');
     assert.equal(paidBatchLateJob.invoiceId, null);
     assert.equal(paidBatchLateJob.billingFollowUp.status, 'open');
+
     assert.equal(
         paidBatchLateJob.billingFollowUp.invoiceId,
         paidBatchInvoiceId
@@ -691,9 +822,15 @@ try {
 
     const overdueSentAt = new Date('2026-12-01T12:00:00Z');
 
-    const overdueSent = store.recordInvoiceSendAttempt(
+    store.recordInvoiceSendAttempt(
         overdueInvoice.id,
         overdueSentAt,
+        'pending',
+        'billing-staff'
+    );
+
+    const overdueSent = store.recordInvoiceDeliveryResult(
+        overdueInvoice.id,
         'delivered',
         'billing-staff'
     );
@@ -737,6 +874,7 @@ try {
 
     assert.equal(warning.updated, true);
     assert.equal(warning.duplicate, false);
+
     assert.equal(
         warning.invoice.warningSentAt,
         afterDueAt.toISOString()
@@ -864,10 +1002,12 @@ try {
     );
 
     assert.equal(cleanedReview.created, true);
+
     assert.equal(
         cleanedReview.job.status,
         'review_cleaned_telemetry'
     );
+
     assert.equal(cleanedReview.job.fineEur, null);
 
     assert.throws(

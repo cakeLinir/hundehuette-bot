@@ -25,6 +25,7 @@ const ALLOWED_REVIEW_STATUSES = new Set([
     'review_details_unavailable',
     'review_missing_completion_time',
     'review_unverified_driver_link',
+    'review_driver_identity_mismatch',
 ]);
 
 function requireText(value, label) {
@@ -176,6 +177,18 @@ function createJobOperation(item, report) {
         `Auftrag ${taskId}: Discord-Fahrer-ID`
     );
 
+    if (!/^\d+$/.test(spedvUserId)) {
+        throw new Error(
+            `Auftrag ${taskId}: SpedV-Fahrer-ID ist ungültig.`
+        );
+    }
+
+    if (!/^\d{17,20}$/.test(discordUserId)) {
+        throw new Error(
+            `Auftrag ${taskId}: Discord-Fahrer-ID ist ungültig.`
+        );
+    }
+
     const maxVelocityKmh = Number(item.maxVelocityKmh);
 
     if (
@@ -245,12 +258,6 @@ function createJobOperation(item, report) {
     };
 }
 
-/**
- * Erstellt aus einer Live-Vorschau einen Importplan.
- *
- * Diese Funktion schreibt keine Daten.
- * Sie ruft keine Discord-Aktionen auf.
- */
 function buildImportPlan(report, options = {}) {
     if (!isObject(report)) {
         throw new TypeError('Live-Vorschau ist kein gültiges Objekt.');
@@ -272,6 +279,15 @@ function buildImportPlan(report, options = {}) {
     if (!Array.isArray(report.items)) {
         throw new TypeError(
             'Live-Vorschau enthält keine gültige items-Liste.'
+        );
+    }
+
+    if (
+        report.unassignedItems !== undefined &&
+        !Array.isArray(report.unassignedItems)
+    ) {
+        throw new TypeError(
+            'Live-Vorschau enthält keine gültige unassignedItems-Liste.'
         );
     }
 
@@ -355,6 +371,70 @@ function buildImportPlan(report, options = {}) {
         }
     }
 
+    const unassignedItems = report.unassignedItems || [];
+
+    let unassignedReviewCount = 0;
+
+    for (let index = 0; index < unassignedItems.length; index += 1) {
+        const item = unassignedItems[index];
+
+        try {
+            if (!isObject(item)) {
+                throw new TypeError(
+                    'Unzugeordneter Eintrag ist kein gültiges Objekt.'
+                );
+            }
+
+            const taskId = requireText(
+                item.taskId,
+                `Unzugeordneter Eintrag ${index}: taskId`
+            );
+
+            if (seenTaskIds.has(taskId)) {
+                throw new Error(
+                    `Auftrag ${taskId} kommt mehrfach in der Vorschau vor.`
+                );
+            }
+
+            seenTaskIds.add(taskId);
+
+            if (item.status !== 'review_missing_completion_time') {
+                throw new Error(
+                    `Unbekannter Status für unzugeordneten Auftrag: ${String(item.status)}`
+                );
+            }
+
+            operations.push({
+                type: 'review',
+                guildId,
+                taskId,
+                billingMonth: null,
+                discordUserId: null,
+                spedvUserId: null,
+                spedvName: null,
+                status: 'review_missing_completion_time',
+                reason: String(
+                    item.reason ||
+                    'Abschlusszeit fehlt oder ist ungültig. Abrechnungsmonat nicht bestimmbar.'
+                ),
+            });
+
+            reviewCount += 1;
+            unassignedReviewCount += 1;
+        } catch (error) {
+            rejected.push({
+                index: report.items.length + index,
+                taskId: item?.taskId == null
+                    ? null
+                    : String(item.taskId),
+                status: item?.status == null
+                    ? null
+                    : String(item.status),
+                reason: error.message,
+            });
+        }
+    }
+
     const planPayload = {
         version: 1,
         mode: 'dry-run',
@@ -370,6 +450,7 @@ function buildImportPlan(report, options = {}) {
         rejectedCount: rejected.length,
         operations,
         rejected,
+        unassignedReviewCount,
     };
 
     const planId = makePlanId(planPayload);
@@ -434,6 +515,7 @@ function validateImportPlan(plan) {
         rejectedCount: plan.rejectedCount,
         operations: plan.operations,
         rejected: plan.rejected,
+        unassignedReviewCount: plan.unassignedReviewCount,
     });
 
     if (expectedId !== plan.planId) {
@@ -470,7 +552,53 @@ function validateImportPlan(plan) {
             ) {
                 validateMonth(operation.billingMonth);
             }
+
+            if (
+                operation.billingMonth !== null &&
+                operation.billingMonth !== undefined
+            ) {
+                validateMonth(operation.billingMonth);
+            }
+
+            if (
+                operation.discordUserId !== null &&
+                operation.discordUserId !== undefined &&
+                !/^\d{17,20}$/.test(String(operation.discordUserId))
+            ) {
+                throw new Error(
+                    `Auftrag ${operation.taskId}: ungültige Discord-ID im Review.`
+                );
+            }
+
+            if (
+                operation.spedvUserId !== null &&
+                operation.spedvUserId !== undefined &&
+                !/^\d+$/.test(String(operation.spedvUserId))
+            ) {
+                throw new Error(
+                    `Auftrag ${operation.taskId}: ungültige SpedV-ID im Review.`
+                );
+            }
+
         } else if (operation.type === 'job') {
+            if (!/^\d+$/.test(String(operation.spedvUserId ?? ''))) {
+                throw new Error(
+                    `Auftrag ${operation.taskId}: ungültige SpedV-Fahrer-ID.`
+                );
+            }
+
+            if (!/^\d{17,20}$/.test(String(operation.discordUserId ?? ''))) {
+                throw new Error(
+                    `Auftrag ${operation.taskId}: ungültige Discord-Fahrer-ID.`
+                );
+            }
+
+            if (!validTimestamp(operation.completedAt)) {
+                throw new Error(
+                    `Auftrag ${operation.taskId}: ungültiger Abschlusszeitpunkt.`
+                );
+            }
+
             if (
                 operation.expectedStatus !== 'fine_assessed' &&
                 operation.expectedStatus !== 'no_violation'

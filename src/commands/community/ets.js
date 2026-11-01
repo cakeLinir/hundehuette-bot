@@ -27,6 +27,8 @@ const {
     getLinkOwner,
     getSpedvNamesByDiscordId,
     setLink,
+    getLinkRecord,
+    getLinkRecordBySpedvUserId,
 } = require('../../utils/spedvApi');
 
 const {
@@ -82,13 +84,6 @@ const MAX_EMBEDS_PER_MESSAGE = 10;
 const MAX_TABLE_DESCRIPTION_LENGTH = 3500;
 const BILLING_FALLBACK_CHANNEL_ID = '1560300974185123840';
 
-/**
- * Prüft, ob ein Mitglied eine der vier abrechnungsberechtigten
- * Funktionsstellen besitzt.
- *
- * Fehlende Rollen-IDs oder nicht auflösbare Rollen führen
- * grundsätzlich zur Verweigerung.
- */
 function hasBillingPermission(member, guildId) {
     if (!member || !guildId || !member.roles?.cache) {
         return false;
@@ -123,12 +118,6 @@ function hasBillingPermission(member, guildId) {
     return false;
 }
 
-/**
- * Ermittelt die Abrechnungsberechtigung anhand der
- * tatsächlichen Discord-Rollen des aufrufenden Mitglieds.
- *
- * Fehlende oder nicht auflösbare Rollen werden nicht akzeptiert.
- */
 async function getBillingPermissions(interaction) {
     const member = await interaction.guild.members.fetch(
         interaction.user.id
@@ -296,31 +285,96 @@ async function verifySpedvName(interaction) {
         );
     }
 
-    const owner = getLinkOwner(driver.userName);
+    const driverSpedvId = String(driver.id ?? '').trim();
 
-    if (
-        owner &&
-        owner !== interaction.user.id
-    ) {
+    if (!/^\d+$/.test(driverSpedvId)) {
         return fail(
             interaction,
-            'Dieser SpedV-Account ist bereits mit einem anderen Discord-Account verknüpft.'
+            'Die SpedV-Nutzer-ID ist ungültig. Eine sichere Verknüpfung ist nicht möglich.'
         );
     }
 
-    if (owner === interaction.user.id) {
-        return grantRoles(interaction, driver);
+    let existingByName;
+    let existingById;
+
+    try {
+        existingByName = getLinkRecord(driver.userName);
+        existingById = getLinkRecordBySpedvUserId(driverSpedvId);
+    } catch (err) {
+        logger.error(
+            'ETS: Bestehende SpedV-Verknüpfungen konnten nicht eindeutig gelesen werden',
+            err
+        );
+
+        return fail(
+            interaction,
+            'Deine bestehende SpedV-Verknüpfung ist nicht eindeutig. Bitte wende dich an die Geschäftsführung.'
+        );
     }
 
-    const pending = getPending(interaction.user.id);
+    if (
+        existingByName &&
+        existingByName.discordId !== interaction.user.id
+    ) {
+        return fail(
+            interaction,
+            'Dieser SpedV-Name ist bereits mit einem anderen Discord-Konto verknüpft.'
+        );
+    }
 
     if (
-        !pending ||
-        norm(pending.spedvName) !== norm(driver.userName)
+        existingById &&
+        existingById.discordId !== interaction.user.id
     ) {
+        return fail(
+            interaction,
+            'Dieses SpedV-Konto ist bereits mit einem anderen Discord-Konto verknüpft.'
+        );
+    }
+
+    if (
+        existingByName?.spedvUserId &&
+        existingByName.spedvUserId !== driverSpedvId
+    ) {
+        return fail(
+            interaction,
+            'Der SpedV-Name ist bereits einer anderen SpedV-Nutzer-ID zugeordnet. Eine automatische Änderung ist nicht möglich.'
+        );
+    }
+
+    if (
+        existingByName?.verified &&
+        existingByName.discordId === interaction.user.id &&
+        existingByName.spedvUserId === driverSpedvId
+    ) {
+        await grantRoles(interaction, driver);
+
+        return interaction.editReply({
+            embeds: [
+                createEmbed(
+                    'success',
+                    'Bereits verifiziert',
+                    `Du bist bereits mit **${driver.userName}** verifiziert. Deine SpedV-Rollen wurden synchronisiert.`
+                ),
+            ],
+            flags: MessageFlags.Ephemeral,
+        });
+    }
+
+    let pending = getPending(interaction.user.id);
+
+    const pendingMatchesDriver =
+        pending &&
+        String(pending.spedvUserId) === String(driver.id) &&
+        norm(pending.spedvName) === norm(driver.userName);
+
+    if (!pendingMatchesDriver) {
+        clearPending(interaction.user.id);
+
         const created = createPending(
             interaction.user.id,
-            driver.userName
+            driver.userName,
+            driver.id
         );
 
         return interaction.editReply({
@@ -367,7 +421,8 @@ async function verifySpedvName(interaction) {
 
     setLink(
         driver.userName,
-        interaction.user.id
+        interaction.user.id,
+        driver.id
     );
 
     return grantRoles(interaction, driver);
@@ -413,8 +468,7 @@ function formatInvoiceStatus(invoice) {
             ? `Fällig am: <t:${Math.floor(new Date(invoice.dueAt).getTime() / 1000)}:d>`
             : null,
         invoice.fallbackNotification
-            ? `Öffentliche Benachrichtigung: **${
-            {
+            ? `Öffentliche Benachrichtigung: **${{
                 pending: 'Ergebnis offen – keine Wiederholung erlaubt',
                 sent: 'Veröffentlicht',
                 unknown: 'Ergebnis unklar – manuelle Prüfung erforderlich',
@@ -427,12 +481,6 @@ function formatInvoiceStatus(invoice) {
         .join('\n');
 }
 
-/**
- * Formatiert einen Wert für die Rechnungstabelle.
- *
- * Es werden keine Geschwindigkeiten oder Strafbeträge berechnet.
- * Die Funktion stellt ausschließlich gespeicherte Werte dar.
- */
 function formatTableValue(value, fieldName) {
     if (
         value === null ||
@@ -455,16 +503,6 @@ function formatTableValue(value, fieldName) {
     return text;
 }
 
-/**
- * Erstellt die Tabellenzeilen ausschließlich aus den gespeicherten
- * Rechnungspositionen.
- *
- * Erwartete Felder:
- * - taskId
- * - maxVelocityKmh
- * - excessKmh
- * - amountEur
- */
 function prepareInvoiceTable(invoice) {
     if (
         !Array.isArray(invoice.lineItems) ||
@@ -570,10 +608,6 @@ function prepareInvoiceTable(invoice) {
     };
 }
 
-/**
- * Teilt die Tabelle in mehrere Embed-Beschreibungen auf,
- * damit Discords Zeichenbegrenzungen nicht überschritten werden.
- */
 function splitInvoiceTable(table) {
     const tableHeader = [
         table.header,
@@ -598,7 +632,7 @@ function splitInvoiceTable(table) {
 
         if (
             candidateDescription.length >
-                MAX_TABLE_DESCRIPTION_LENGTH &&
+            MAX_TABLE_DESCRIPTION_LENGTH &&
             currentRows.length > 0
         ) {
             chunks.push(currentRows);
@@ -627,12 +661,6 @@ function splitInvoiceTable(table) {
     ].join('\n'));
 }
 
-/**
- * Erstellt die formatierten Rechnungs-Embeds.
- *
- * Das Logo wird als Attachment eingebunden.
- * Es wird kein externes Bild und keine Browser-URL benötigt.
- */
 function createInvoiceEmbeds(invoice, driverName) {
     if (!fs.existsSync(LOGO_PATH)) {
         throw new Error(
@@ -958,10 +986,6 @@ async function sendPublicBillingFallback(
     invoice,
     actorDiscordId
 ) {
-    /*
-     * Die Discord-ID aus der Rechnung ist die maßgebliche Identität.
-     * Der SpedV-Name darf diese Identität nicht ersetzen.
-     */
     const linkedNames = getSpedvNamesByDiscordId(
         invoice.discordUserId
     );
@@ -1023,10 +1047,6 @@ async function sendPublicBillingFallback(
         );
     }
 
-    /*
-     * Erst nach erfolgreicher Identitäts- und Kanalprüfung
-     * wird der einmalige Fallback-Versuch dauerhaft reserviert.
-     */
     await recordFallbackNotificationAttempt(
         invoice.id,
         channel.id,
@@ -1049,11 +1069,6 @@ async function sendPublicBillingFallback(
             },
         });
     } catch (sendError) {
-        /*
-         * Ein fehlgeschlagener API-Aufruf beweist nicht sicher,
-         * dass Discord keine Nachricht erstellt hat.
-         * Deshalb unknown statt failed und keine Wiederholung.
-         */
         try {
             await recordFallbackNotificationResult(
                 invoice.id,
@@ -1189,11 +1204,6 @@ async function handleBillingSend(interaction) {
 
         const driverName = linkedNames[0];
 
-        /*
-         * Alle lokalen Voraussetzungen vor dem Versandversuch prüfen.
-         * So wird eine Rechnung nicht unnötig auf pending gesetzt,
-         * wenn beispielsweise das Logo oder die Rechnungsdaten fehlen.
-         */
         if (!fs.existsSync(LOGO_PATH)) {
             throw new Error(
                 `Das HKC-Logo wurde nicht gefunden: ${LOGO_PATH}`
@@ -1206,10 +1216,6 @@ async function handleBillingSend(interaction) {
             invoice.discordUserId
         );
 
-        /*
-         * Versandversuch VOR dem Discord-Aufruf dauerhaft protokollieren.
-         * Der Store liefert den verbindlichen dueAt-Wert zurück.
-         */
         invoice = await recordInvoiceSendAttempt(
             invoice.id,
             new Date(),
@@ -1217,18 +1223,11 @@ async function handleBillingSend(interaction) {
             interaction.user.id
         );
 
-        /*
-         * Die Zahlungsfrist und alle Rechnungsdaten werden erst
-         * nach dem gespeicherten Versandversuch final formatiert.
-         */
         const invoiceMessage = createInvoiceEmbeds(
             invoice,
             driverName
         );
 
-        /*
-         * 1. Ausschließlich den eigentlichen Discord-Versand behandeln.
-         */
         try {
             await targetMember.send({
                 embeds: invoiceMessage.embeds,
@@ -1315,12 +1314,6 @@ async function handleBillingSend(interaction) {
             }
         }
 
-        /*
-         * 2. Der DM-Versand war erfolgreich.
-         *
-         * Das Speichern des Ergebnisses darf NICHT als Versandfehler
-         * behandelt werden, da die Nachricht bereits versendet wurde.
-         */
         try {
             await recordInvoiceDeliveryResult(
                 invoice.id,

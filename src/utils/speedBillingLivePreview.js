@@ -37,25 +37,60 @@ function validateMonth(month) {
 
 function readLinks(links) {
     if (!links || typeof links !== 'object' || Array.isArray(links)) {
-        throw new TypeError('etsLinks muss ein Objekt sein.');
+        throw new TypeError('etsLinks muss ein JSON-Objekt sein.');
     }
 
-    const result = new Map();
+    const byName = new Map();
+    const byId = new Map();
 
-    for (const [name, discordId] of Object.entries(links)) {
+    for (const [name, value] of Object.entries(links)) {
         const key = norm(name);
-        const id = String(discordId ?? '').trim();
 
-        if (!key || !id) continue;
-
-        if (result.has(key) && result.get(key) !== id) {
-            throw new Error(`Mehrdeutiger Discord-Link für SpedV-Nutzer ${name}.`);
+        if (!key) {
+            throw new Error('etsLinks enthält einen leeren SpedV-Namen.');
         }
 
-        result.set(key, id);
+        // Alte String-Verknüpfungen sind nicht verifiziert.
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            continue;
+        }
+
+        const spedvName = String(value.spedvName || name).trim();
+        const discordId = String(value.discordId ?? '').trim();
+        const spedvUserId = String(value.spedvUserId ?? '').trim();
+
+        if (
+            !/^\d{17,20}$/.test(discordId) ||
+            !/^\d+$/.test(spedvUserId)
+        ) {
+            continue;
+        }
+
+        const record = {
+            spedvName,
+            discordId,
+            spedvUserId,
+        };
+
+        const normalizedName = norm(spedvName);
+
+        if (byName.has(normalizedName)) {
+            throw new Error(
+                `Mehrdeutiger verifizierter SpedV-Name: ${spedvName}.`
+            );
+        }
+
+        if (byId.has(spedvUserId)) {
+            throw new Error(
+                `SpedV-Nutzer-ID ${spedvUserId} ist mehrfach verknüpft.`
+            );
+        }
+
+        byName.set(normalizedName, record);
+        byId.set(spedvUserId, record);
     }
 
-    return result;
+    return { byName, byId };
 }
 
 function inspectTelemetry(data, taskId) {
@@ -161,7 +196,7 @@ async function buildLivePreview({
 
     validateMonth(month);
 
-    const linkMap = readLinks(links);
+    const linkMaps = readLinks(links);
     const tasks = await client.fetchTasks();
 
     const report = {
@@ -211,7 +246,6 @@ async function buildLivePreview({
 
         report.hkcTaskCount += 1;
 
-        // Aufgaben- und Detailstatus müssen übereinstimmen.
         if (Number(details.state) !== SETTLED_STATE) {
             report.reviewCount += 1;
             report.items.push({
@@ -226,25 +260,47 @@ async function buildLivePreview({
 
         const completedAt = details.endtime;
 
-        // Ohne Abschlusszeit ist keine zuverlässige Monatszuordnung möglich.
         if (!validTimestamp(completedAt)) {
-            report.items.push({
+            report.unassignedReviewCount += 1;
+
+            report.unassignedItems.push({
                 taskId,
                 status: 'review_missing_completion_time',
                 completedAt: null,
+                billingMonth: null,
                 reason: 'Abschlusszeit fehlt oder ist ungültig. Abrechnungsmonat nicht bestimmbar.',
+            });
+
+            continue;
+        }
+
+        if (monthInBerlin(completedAt) !== month) continue;
+
+        const spedvName = String(details.user?.userName ?? '').trim();
+        const detailsUserId = String(details.user?.id ?? '').trim();
+        const taskUserId = String(task.userID ?? '').trim();
+
+        if (
+            detailsUserId &&
+            taskUserId &&
+            detailsUserId !== taskUserId
+        ) {
+            report.reviewCount += 1;
+            report.items.push({
+                taskId,
+                status: 'review_driver_identity_mismatch',
+                spedvName: spedvName || null,
+                detailsSpedvUserId: detailsUserId,
+                taskSpedvUserId: taskUserId,
+                completedAt,
+                reason: 'SpedV-Nutzer-ID in Aufgabenliste und Auftragsdetails stimmt nicht überein.',
             });
             continue;
         }
 
-        // Ausschließlich der Abschlusszeitpunkt bestimmt den Abrechnungsmonat.
-        if (monthInBerlin(completedAt) !== month) continue;
+        const spedvUserId = detailsUserId || taskUserId;
 
-        const spedvName = String(details.user?.userName ?? '').trim();
-        const spedvUserId = String(details.user?.id ?? task.userID ?? '').trim();
-        const discordUserId = linkMap.get(norm(spedvName));
-
-        if (!spedvName || !discordUserId) {
+        if (!spedvName || !/^\d+$/.test(spedvUserId)) {
             report.reviewCount += 1;
             report.items.push({
                 taskId,
@@ -252,10 +308,47 @@ async function buildLivePreview({
                 spedvName: spedvName || null,
                 spedvUserId: spedvUserId || null,
                 completedAt,
-                reason: 'Kein exakter SpedV-Nutzername-zu-Discord-ID-Link vorhanden.',
+                reason: 'SpedV-Name oder gültige SpedV-Nutzer-ID fehlt.',
             });
             continue;
         }
+
+        const linkById = linkMaps.byId.get(spedvUserId);
+        const linkByName = linkMaps.byName.get(norm(spedvName));
+
+        if (
+            linkByName &&
+            (
+                linkByName.spedvUserId !== spedvUserId ||
+                (linkById && linkByName.discordId !== linkById.discordId)
+            )
+        ) {
+            report.reviewCount += 1;
+            report.items.push({
+                taskId,
+                status: 'review_driver_identity_mismatch',
+                spedvName,
+                spedvUserId,
+                completedAt,
+                reason: 'Der Namenslink widerspricht der verifizierten SpedV-ID-Zuordnung.',
+            });
+            continue;
+        }
+
+        if (!linkById) {
+            report.reviewCount += 1;
+            report.items.push({
+                taskId,
+                status: 'review_unverified_driver_link',
+                spedvName,
+                spedvUserId,
+                completedAt,
+                reason: 'Für diese SpedV-Nutzer-ID existiert keine verifizierte Discord-Verknüpfung.',
+            });
+            continue;
+        }
+
+        const discordUserId = linkById.discordId;
 
         if (details.ddCleaned === true) {
             report.reviewCount += 1;
@@ -366,6 +459,8 @@ async function buildLivePreview({
             fineEur,
             status: fineEur > 0 ? 'fine_candidate' : 'no_violation',
             evidenceSource: 'SpedV-v1-drivedata',
+            unassignedReviewCount: 0,
+            unassignedItems: [],
         };
 
         report.items.push(item);

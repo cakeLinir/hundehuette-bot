@@ -16,6 +16,10 @@ const {
     assertCommitHasOperations,
 } = require('../src/utils/speedBillingCommitGuard');
 
+const {
+    getLinkRecordBySpedvUserId,
+} = require('../src/utils/spedvApi');
+
 function getArgument(name) {
     const index = process.argv.indexOf(name);
 
@@ -50,7 +54,7 @@ function printPlan(plan) {
     console.log(`Schreibvorgänge:         ${plan.writesPerformed ? 'JA' : 'NEIN'}`);
     console.log(`Discord-Aktionen:        ${plan.discordActionsPerformed ? 'JA' : 'NEIN'}`);
     console.log(`Commit freigegeben:      ${plan.readyToCommit ? 'JA' : 'NEIN'}`);
-
+    console.log(`Davon ohne Monatszuordnung: ${plan.unassignedReviewCount || 0}`);
     if (plan.rejected.length > 0) {
         console.log('\n=== ABGELEHNTE EINTRÄGE ===');
 
@@ -138,6 +142,55 @@ async function createDryRun() {
     console.log('Für einen Commit ist eine separate Bestätigung erforderlich.');
 }
 
+function assertCurrentDriverLinks(plan) {
+    const checkedDrivers = new Map();
+
+    for (const operation of plan.operations) {
+        if (operation.type !== 'job') {
+            continue;
+        }
+
+        const spedvUserId = String(operation.spedvUserId ?? '').trim();
+        const discordUserId = String(operation.discordUserId ?? '').trim();
+
+        if (!/^\d+$/.test(spedvUserId)) {
+            throw new Error(
+                `Commit gesperrt: Ungültige SpedV-ID bei Auftrag ${operation.taskId}.`
+            );
+        }
+
+        if (!/^\d{17,20}$/.test(discordUserId)) {
+            throw new Error(
+                `Commit gesperrt: Ungültige Discord-ID bei Auftrag ${operation.taskId}.`
+            );
+        }
+
+        let currentLink = checkedDrivers.get(spedvUserId);
+
+        if (!currentLink) {
+            currentLink = getLinkRecordBySpedvUserId(spedvUserId);
+
+            if (!currentLink || currentLink.verified !== true) {
+                throw new Error(
+                    `Commit gesperrt: Keine aktuelle verifizierte Verknüpfung für SpedV-ID ${spedvUserId}.`
+                );
+            }
+
+            checkedDrivers.set(spedvUserId, currentLink);
+        }
+
+        if (String(currentLink.discordId) !== discordUserId) {
+            throw new Error(
+                `Commit gesperrt: Discord-Zuordnung für SpedV-ID ${spedvUserId} hat sich geändert. Auftrag ${operation.taskId}.`
+            );
+        }
+    }
+
+    console.log(
+        `Aktuelle Fahrer-Verknüpfungen geprüft: ${checkedDrivers.size}`
+    );
+}
+
 async function commitPlan() {
     const planArgument = getArgument('--commit');
     const confirmationId = getArgument('--confirm-plan-id');
@@ -168,10 +221,14 @@ async function commitPlan() {
         );
     }
 
-    // Der Plan wird vor jedem Schreibvorgang vollständig validiert.
     validateImportPlan(plan);
 
-    // Auch ein formal gültiger Leerplan darf niemals committet werden.
+    validateImportPlan(plan);
+
+    assertCurrentDriverLinks(plan);
+
+    assertCommitHasOperations(plan);
+
     assertCommitHasOperations(plan);
 
     console.log('\n=== COMMIT-BESTÄTIGUNG ===');

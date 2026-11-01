@@ -1027,7 +1027,7 @@ async function sendPublicBillingFallback(
      * Erst nach erfolgreicher Identitäts- und Kanalprüfung
      * wird der einmalige Fallback-Versuch dauerhaft reserviert.
      */
-    recordFallbackNotificationAttempt(
+    await recordFallbackNotificationAttempt(
         invoice.id,
         channel.id,
         actorDiscordId
@@ -1055,7 +1055,7 @@ async function sendPublicBillingFallback(
          * Deshalb unknown statt failed und keine Wiederholung.
          */
         try {
-            recordFallbackNotificationResult(
+            await recordFallbackNotificationResult(
                 invoice.id,
                 'unknown',
                 {
@@ -1078,7 +1078,7 @@ async function sendPublicBillingFallback(
     }
 
     try {
-        recordFallbackNotificationResult(
+        await recordFallbackNotificationResult(
             invoice.id,
             'sent',
             {
@@ -1210,7 +1210,7 @@ async function handleBillingSend(interaction) {
          * Versandversuch VOR dem Discord-Aufruf dauerhaft protokollieren.
          * Der Store liefert den verbindlichen dueAt-Wert zurück.
          */
-        invoice = recordInvoiceSendAttempt(
+        invoice = await recordInvoiceSendAttempt(
             invoice.id,
             new Date(),
             'pending',
@@ -1247,7 +1247,7 @@ async function handleBillingSend(interaction) {
                     : 'unknown';
 
             try {
-                recordInvoiceDeliveryResult(
+                await recordInvoiceDeliveryResult(
                     invoice.id,
                     delivery,
                     interaction.user.id
@@ -1322,7 +1322,7 @@ async function handleBillingSend(interaction) {
          * behandelt werden, da die Nachricht bereits versendet wurde.
          */
         try {
-            recordInvoiceDeliveryResult(
+            await recordInvoiceDeliveryResult(
                 invoice.id,
                 'delivered',
                 interaction.user.id

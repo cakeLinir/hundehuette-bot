@@ -201,6 +201,7 @@ function getNormalizedEntries(links) {
     const entries = new Map();
 
     for (const [name, value] of Object.entries(links)) {
+        const key = norm(name);
         const link = normalizeLink(name, value);
 
         if (norm(link.spedvName) !== key) {

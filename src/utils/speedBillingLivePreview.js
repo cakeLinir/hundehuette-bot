@@ -59,47 +59,84 @@ function readLinks(links) {
 }
 
 function inspectTelemetry(data, taskId) {
-    if (!data || typeof data !== 'object' || Array.isArray(data)) {
-        return { ok: false, status: 'review_missing_telemetry', reason: 'Telemetrieantwort fehlt oder ist ungültig.' };
-    }
-
-    const velocity = data.velocity;
-    const timestamp = data.timestamp;
-    const speedLimit = data.speedLimit;
-
-    if (!Array.isArray(velocity) || !Array.isArray(timestamp) ||
-        velocity.length === 0 || velocity.length !== timestamp.length) {
-        return { ok: false, status: 'review_incomplete_telemetry', reason: 'velocity/timestamp fehlen, sind leer oder unterschiedlich lang.' };
-    }
-
-    if (Array.isArray(speedLimit) && speedLimit.length !== velocity.length) {
-        return { ok: false, status: 'review_incomplete_telemetry', reason: 'speedLimit hat eine abweichende Anzahl an Messpunkten.' };
+    if (!Array.isArray(data) || data.length === 0) {
+        return {
+            ok: false,
+            status: 'review_missing_telemetry',
+            reason: 'Telemetrie fehlt, ist kein Array oder enthält keine Messpunkte.',
+        };
     }
 
     let maxVelocity = null;
     let maxTimestamp = null;
+    let invalidVelocityPoints = 0;
+    let speedLimitZeroPoints = 0;
+    const invalidPoints = [];
 
-    for (let i = 0; i < velocity.length; i += 1) {
-        const speed = Number(velocity[i]);
+    for (let i = 0; i < data.length; i += 1) {
+        const point = data[i];
 
-        if (velocity[i] === null || velocity[i] === '' || !Number.isFinite(speed) || speed < 0) {
-            return { ok: false, status: 'review_incomplete_telemetry', reason: `Ungültiger Geschwindigkeitswert an Index ${i}.` };
+        if (!point || typeof point !== 'object' || Array.isArray(point)) {
+            return {
+                ok: false,
+                status: 'review_incomplete_telemetry',
+                reason: `Ungültiger Messpunkt an Index ${i}.`,
+            };
         }
 
-        if (!validTimestamp(timestamp[i])) {
-            return { ok: false, status: 'review_incomplete_telemetry', reason: `Ungültiger Zeitstempel an Index ${i}.` };
+        if (!validTimestamp(point.timestamp)) {
+            return {
+                ok: false,
+                status: 'review_incomplete_telemetry',
+                reason: `Ungültiger Zeitstempel an Index ${i}.`,
+            };
+        }
+
+        const speed = point.velocity;
+
+        if (
+            typeof speed !== 'number' ||
+            !Number.isFinite(speed) ||
+            speed < 0
+        ) {
+            invalidVelocityPoints += 1;
+
+            invalidPoints.push({
+                index: i,
+                timestamp: point.timestamp,
+                velocity: speed ?? null,
+                reason: 'Geschwindigkeitswert fehlt oder ist ungültig.',
+            });
+
+            continue;
+        }
+
+        if (Number(point.speedLimit) === 0) {
+            speedLimitZeroPoints += 1;
         }
 
         if (maxVelocity === null || speed > maxVelocity) {
             maxVelocity = speed;
-            maxTimestamp = new Date(timestamp[i]).toISOString();
+            maxTimestamp = new Date(point.timestamp).toISOString();
         }
+    }
+
+    if (maxVelocity === null) {
+        return {
+            ok: false,
+            status: 'review_incomplete_telemetry',
+            reason: 'Kein gültiger Geschwindigkeitsmesspunkt vorhanden.',
+        };
     }
 
     return {
         ok: true,
-        points: velocity.length,
-        maxVelocityKmh: Math.floor(maxVelocity),
+        points: data.length,
+        validPoints: data.length - invalidVelocityPoints,
+        invalidVelocityPoints,
+        invalidPoints,
+        speedLimitZeroPoints,
+        maxVelocityKmh: maxVelocity,
         maxTimestamp,
     };
 }
@@ -174,17 +211,33 @@ async function buildLivePreview({
 
         report.hkcTaskCount += 1;
 
-        const completedAt = details.endtime;
-        if (!validTimestamp(completedAt)) {
+        // Aufgaben- und Detailstatus müssen übereinstimmen.
+        if (Number(details.state) !== SETTLED_STATE) {
             report.reviewCount += 1;
             report.items.push({
                 taskId,
-                status: 'review_missing_completion_time',
-                reason: 'details.endtime fehlt oder ist ungültig.',
+                status: 'review_state_mismatch',
+                taskState: Number(task.state),
+                detailsState: details.state ?? null,
+                reason: 'Aufgabenstatus und Detailstatus sind nicht beide abgeschlossen.',
             });
             continue;
         }
 
+        const completedAt = details.endtime;
+
+        // Ohne Abschlusszeit ist keine zuverlässige Monatszuordnung möglich.
+        if (!validTimestamp(completedAt)) {
+            report.items.push({
+                taskId,
+                status: 'review_missing_completion_time',
+                completedAt: null,
+                reason: 'Abschlusszeit fehlt oder ist ungültig. Abrechnungsmonat nicht bestimmbar.',
+            });
+            continue;
+        }
+
+        // Ausschließlich der Abschlusszeitpunkt bestimmt den Abrechnungsmonat.
         if (monthInBerlin(completedAt) !== month) continue;
 
         const spedvName = String(details.user?.userName ?? '').trim();
@@ -248,9 +301,33 @@ async function buildLivePreview({
             continue;
         }
 
-        const summaryMax = Number(details.maxVelocityKMH);
-        if (Number.isFinite(summaryMax) &&
-            Math.floor(summaryMax) !== telemetry.maxVelocityKmh) {
+        const rawSummaryMax = details.maxVelocityKMH;
+
+        if (
+            rawSummaryMax === null ||
+            rawSummaryMax === undefined ||
+            rawSummaryMax === '' ||
+            !Number.isFinite(Number(rawSummaryMax)) ||
+            Number(rawSummaryMax) < 0
+        ) {
+            report.reviewCount += 1;
+            report.items.push({
+                taskId,
+                status: 'review_missing_speed_summary',
+                spedvName,
+                discordUserId,
+                completedAt,
+                reason: 'SpedV-Höchstgeschwindigkeit fehlt oder ist ungültig.',
+            });
+            continue;
+        }
+
+        const summaryMax = Number(rawSummaryMax);
+
+        if (
+            Math.floor(summaryMax) !==
+            Math.floor(telemetry.maxVelocityKmh)
+        ) {
             report.reviewCount += 1;
             report.items.push({
                 taskId,
@@ -259,13 +336,16 @@ async function buildLivePreview({
                 discordUserId,
                 completedAt,
                 summaryMaxVelocityKmh: Math.floor(summaryMax),
-                telemetryMaxVelocityKmh: telemetry.maxVelocityKmh,
+                telemetryMaxVelocityKmh: Math.floor(telemetry.maxVelocityKmh),
                 reason: 'API-Zusammenfassung und Telemetrie-Höchstwert stimmen nicht überein.',
             });
             continue;
         }
 
-        const excessKmh = Math.max(0, telemetry.maxVelocityKmh - SPEED_LIMIT_KMH);
+        const excessKmh = Math.max(
+            0,
+            Math.floor(telemetry.maxVelocityKmh) - SPEED_LIMIT_KMH
+        );
         const fineEur = excessKmh * FINE_PER_KMH_EUR;
 
         const item = {
@@ -278,6 +358,9 @@ async function buildLivePreview({
             telemetryPoints: telemetry.points,
             maxVelocityKmh: telemetry.maxVelocityKmh,
             maxVelocityAt: telemetry.maxTimestamp,
+            validTelemetryPoints: telemetry.validPoints,
+            invalidVelocityPoints: telemetry.invalidVelocityPoints,
+            speedLimitZeroPoints: telemetry.speedLimitZeroPoints,
             limitKmh: SPEED_LIMIT_KMH,
             excessKmh,
             fineEur,

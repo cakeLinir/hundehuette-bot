@@ -188,7 +188,7 @@ async function commitPlan() {
 
     console.log(`Zieldatei:               ${storePath}`);
 
-    const result = applyImportPlan(plan);
+    const result = await applyImportPlan(plan);
 
     console.log('\n=== COMMIT-ERGEBNIS ===');
     console.log(JSON.stringify(result, null, 2));

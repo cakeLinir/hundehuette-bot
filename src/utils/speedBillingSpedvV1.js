@@ -79,18 +79,10 @@ function createSpedvV1Client(options = {}) {
         const id = requireTaskId(taskId);
         const data = await get(`/v1/tasks/${encodeURIComponent(id)}/drivedata`);
 
-        if (!data || typeof data !== 'object' || Array.isArray(data)) {
-            throw new Error(`SpedV-v1: Ungültige Telemetrieantwort für Auftrag ${id}.`);
-        }
-
-        for (const field of ['velocity', 'timestamp']) {
-            if (!Array.isArray(data[field])) {
-                throw new Error(`SpedV-v1: Telemetriefeld ${field} fehlt für Auftrag ${id}.`);
-            }
-        }
-
-        if (data.velocity.length !== data.timestamp.length) {
-            throw new Error(`SpedV-v1: Telemetriearrays sind unvollständig für Auftrag ${id}.`);
+        if (!Array.isArray(data)) {
+            throw new Error(
+                `SpedV-v1: Telemetrie für Auftrag ${id} ist kein Array.`
+            );
         }
 
         return data;

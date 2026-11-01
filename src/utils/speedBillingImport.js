@@ -500,7 +500,7 @@ function validateImportPlan(plan) {
 }
 
 
-function applyImportPlan(plan, options = {}) {
+async function applyImportPlan(plan, options = {}) {
     validateImportPlan(plan);
 
     if (plan.operations.length === 0) {
@@ -511,7 +511,7 @@ function applyImportPlan(plan, options = {}) {
 
     const startedAt = new Date().toISOString();
 
-    const batchResult = recordImportBatch(
+    const batchResult = await recordImportBatch(
         plan.operations,
         options.actorDiscordId ?? null
     );

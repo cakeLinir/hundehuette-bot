@@ -222,12 +222,8 @@ async function commitPlan() {
     }
 
     validateImportPlan(plan);
-
-    validateImportPlan(plan);
-
+    
     assertCurrentDriverLinks(plan);
-
-    assertCommitHasOperations(plan);
 
     assertCommitHasOperations(plan);
 

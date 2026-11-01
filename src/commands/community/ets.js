@@ -916,7 +916,7 @@ async function handleBillingPaid(interaction) {
             });
         }
 
-        const result = markInvoicePaid(
+        const result = await markInvoicePaid(
             invoice.id,
             interaction.user.id,
             [...member.roles.cache.keys()],

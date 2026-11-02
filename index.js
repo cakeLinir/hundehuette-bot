@@ -8,6 +8,7 @@ const { startServer } = require('./src/server/index');
 const { setClient } = require('./src/server/twitchEvents');
 const { scheduleAutoRestart } = require('./src/utils/autoRestart');
 const { startRoleSync } = require('./src/utils/spedvRoleSync');
+const { startPartnerSync } = require('./src/utils/partnerRoles');
 
 // Bot Client erstellen mit den benötigten Intents
 const client = new Client({
@@ -43,6 +44,7 @@ client.once('clientReady', () => {
     startServer(client);
     scheduleAutoRestart(client);
     startRoleSync(client);
+    startPartnerSync(client);
     logger.info(`✅ Bot eingeloggt als ${client.user.tag}`);
 });
 

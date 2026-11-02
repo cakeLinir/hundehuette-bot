@@ -29,18 +29,27 @@ function saveState(drivers) {
 function buildWelcome(driver) {
     const name = driver.userName;
     const rank = driver.rank?.name ?? 'Fahrer auf Probe';
+    const rulesChannelId = process.env.ETS_RULES_CHANNEL_ID;
 
-    return createEmbed(
-        'info',
-        '🚚 Willkommen in der Spedition!',
-        `Schön, dass du dabei bist, **${name}**!\n` +
-        `Du startest als **${rank}**.\n\n` +
-        `**So kommst du auf unseren Discord-Bereich:**\n` +
-        `1. Setz deinen Server-Nickname auf deinen SpedV-Namen **${name}**.\n` +
-        `2. Nutze den Befehl **/ets**.\n` +
-        `3. Trag den Code in SpedV unter **Über mich** ein und nutze danach nochmal **/ets**.\n\n` +
-        `Danach bekommst du automatisch deine Rollen. Gute Fahrt! 🛣️`
-    );
+    const lines = [
+        `Schön, dass du dabei bist, **${name}**!`,
+        `Du startest als **${rank}**.`,
+        '',
+        '**So schaltest du deinen Discord-Bereich frei:**',
+        `1. Nutze den Befehl **/ets link** und gib deinen SpedV-Namen **${name}** an.`,
+        '2. Der Bot gibt dir einen Code. Trage ihn in SpedV im Profil unter **Über mich** ein und speichere.',
+        `3. Führe **/ets link** mit demselben Namen (**${name}**) nochmal aus.`,
+        '',
+        'Danach bekommst du automatisch deine Rollen.',
+    ];
+
+    if (rulesChannelId) {
+        lines.push('', `Bitte lies vorab unser Regelwerk: <#${rulesChannelId}>`);
+    }
+
+    lines.push('', 'Und denk dran: **Das echte Leben hat immer Vorfahrt.** Gute Fahrt! 🛣️');
+
+    return createEmbed('info', '🚚 Willkommen in der Spedition!', lines.join('\n'));
 }
 
 /**

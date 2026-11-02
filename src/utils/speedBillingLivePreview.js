@@ -1,10 +1,9 @@
-
 'use strict';
 
 const SPEED_LIMIT_KMH = 95;
 const FINE_PER_KMH_EUR = 100;
 const SETTLED_STATE = 2;
-const HKC_SPEDITION_ID = '108570';
+const DEFAULT_SPEDITION_ID = '108570';
 const TIME_ZONE = 'Europe/Berlin';
 
 function norm(value) {
@@ -135,14 +134,12 @@ function inspectTelemetry(data, taskId) {
             speed < 0
         ) {
             invalidVelocityPoints += 1;
-
             invalidPoints.push({
                 index: i,
                 timestamp: point.timestamp,
                 velocity: speed ?? null,
                 reason: 'Geschwindigkeitswert fehlt oder ist ungültig.',
             });
-
             continue;
         }
 
@@ -185,7 +182,7 @@ async function buildLivePreview({
     links,
     month,
     guildId,
-    speditionId = HKC_SPEDITION_ID,
+    speditionId = process.env.SPEDV_SPEDITION_ID || DEFAULT_SPEDITION_ID,
 }) {
     if (!client ||
         typeof client.fetchTasks !== 'function' ||
@@ -212,9 +209,11 @@ async function buildLivePreview({
         reviewCount: 0,
         ignoredOtherSpeditionCount: 0,
         proposedFineTotalEur: 0,
+        unassignedReviewCount: 0,
         writesPerformed: false,
         discordActionsPerformed: false,
         items: [],
+        unassignedItems: [],
     };
 
     for (const task of tasks) {
@@ -223,6 +222,7 @@ async function buildLivePreview({
         report.settledTaskCount += 1;
 
         const taskId = String(task.id);
+
         let details;
 
         try {
@@ -261,8 +261,9 @@ async function buildLivePreview({
         const completedAt = details.endtime;
 
         if (!validTimestamp(completedAt)) {
+            // Ohne Abschlusszeit ist der Abrechnungsmonat nicht bestimmbar.
+            report.reviewCount += 1;
             report.unassignedReviewCount += 1;
-
             report.unassignedItems.push({
                 taskId,
                 status: 'review_missing_completion_time',
@@ -270,7 +271,6 @@ async function buildLivePreview({
                 billingMonth: null,
                 reason: 'Abschlusszeit fehlt oder ist ungültig. Abrechnungsmonat nicht bestimmbar.',
             });
-
             continue;
         }
 
@@ -364,6 +364,7 @@ async function buildLivePreview({
         }
 
         let driveData;
+
         try {
             driveData = await client.fetchDriveData(taskId);
         } catch (error) {
@@ -439,6 +440,7 @@ async function buildLivePreview({
             0,
             Math.floor(telemetry.maxVelocityKmh) - SPEED_LIMIT_KMH
         );
+
         const fineEur = excessKmh * FINE_PER_KMH_EUR;
 
         const item = {
@@ -459,8 +461,6 @@ async function buildLivePreview({
             fineEur,
             status: fineEur > 0 ? 'fine_candidate' : 'no_violation',
             evidenceSource: 'SpedV-v1-drivedata',
-            unassignedReviewCount: 0,
-            unassignedItems: [],
         };
 
         report.items.push(item);

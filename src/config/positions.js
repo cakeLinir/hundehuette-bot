@@ -4,7 +4,7 @@
  * Diese Liste ist unabhängig von den SpedV-Fahrerrängen.
  * minRank verweist auf den internen Schlüssel aus ranks.js.
  *
- * Alle 15 Funktionsstellen können öffentlich beantragt werden.
+ * Alle 14 Funktionsstellen können öffentlich beantragt werden.
  * reviewerPositionKeys legt fest, welche Funktionsstellen die
  * Bewerbung prüfen dürfen. Discord-Administrator und Geschäftsführung
  * können gemäß positionApplicationPermissions.js ebenfalls prüfen.
@@ -79,17 +79,17 @@ module.exports = [
             'Koordiniert die Buchhaltung und verantwortet die Prüfung sowie Dokumentation interner Abrechnungen.',
     },
     {
-        key: 'werkstattleiter',
-        name: 'Werkstattleitung',
-        role: 'Werkstattleiter',
-        env: 'ROLE_WERKSTATTLEITER',
+        key: 'fuhrparkmanagement',
+        name: 'Fuhrparkmanagement',
+        role: 'Fuhrparkmanagement',
+        env: 'ROLE_FUHRPARKMANAGEMENT',
         reviewerPositionKeys: ['geschaeftsfuehrer'],
         color: 0x00bcd4,
         minRank: 'senior',
         permissions: [],
         category: 'leitung',
         description:
-            'Koordiniert Werkstatt- und Fuhrparkaufgaben, unterstützt Fahrer bei technischen Fragen und organisiert die zugehörigen Abläufe.',
+            'Koordiniert Fuhrpark und Werkstattaufgaben, unterstützt Fahrer bei technischen Fragen und organisiert die zugehörigen Abläufe.',
     },
     {
         key: 'ausbildungsleiter',
@@ -129,19 +129,6 @@ module.exports = [
         category: 'organisation',
         description:
             'Plant Speditionsevents und Konvois, koordiniert Termine und stimmt organisatorische Abläufe mit den Beteiligten ab.',
-    },
-    {
-        key: 'moderationsleiter',
-        name: 'Community- und Moderationsleiter',
-        role: 'Moderationsleiter',
-        env: 'ROLE_MODERATIONSLEITER',
-        reviewerPositionKeys: ['geschaeftsfuehrer'],
-        color: 0x7f8c8d,
-        minRank: 'senior',
-        permissions: [],
-        category: 'leitung',
-        description:
-            'Koordiniert die Community-Moderation, begleitet interne Konfliktklärungen und stimmt Moderationsabläufe mit der Leitung ab.',
     },
     {
         key: 'disposition',

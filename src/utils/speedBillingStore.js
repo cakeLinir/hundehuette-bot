@@ -806,7 +806,7 @@ function recordCompletedJob(input, actorDiscordId = null) {
             job,
             actorDiscordId
         );
-    
+
 
     if (!isReviewStatus(job.status)) {
         resolveMatchingReviewCase(
@@ -850,6 +850,7 @@ function findBlockingReviewCases(data, guildId, month, discordUserId) {
             return false;
         }
 
+        // Globale Prüffälle blockieren weiterhin alle Rechnungen.
         if (
             reviewCase.globalBlock ||
             !reviewCase.billingMonth
@@ -857,14 +858,18 @@ function findBlockingReviewCases(data, guildId, month, discordUserId) {
             return true;
         }
 
+        // Prüffälle anderer Abrechnungsmonate ignorieren.
         if (reviewCase.billingMonth !== month) {
             return false;
         }
 
+        // Ohne Discord-Zuordnung kann kein bestimmter Fahrer
+        // identifiziert werden. Andere Fahrer bleiben abrechenbar.
         if (!reviewCase.discordUserId) {
-            return true;
+            return false;
         }
 
+        // Zugeordnete Prüffälle blockieren nur den betroffenen Fahrer.
         return reviewCase.discordUserId === discordUserId;
     });
 }

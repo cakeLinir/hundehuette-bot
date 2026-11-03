@@ -9,6 +9,7 @@ const { setClient } = require('./src/server/twitchEvents');
 const { scheduleAutoRestart } = require('./src/utils/autoRestart');
 const { startRoleSync } = require('./src/utils/spedvRoleSync');
 const { startPartnerSync } = require('./src/utils/partnerRoles');
+const { startBillingSchedule } = require('./src/billing/schedule');
 
 // Bot Client erstellen mit den benötigten Intents
 const client = new Client({
@@ -45,6 +46,13 @@ client.once('clientReady', () => {
     scheduleAutoRestart(client);
     startRoleSync(client);
     startPartnerSync(client);
+
+    try {
+        startBillingSchedule(client);
+    } catch (error) {
+        logger.error('Abrechnung konnte nicht gestartet werden', error);
+    }
+
     logger.info(`✅ Bot eingeloggt als ${client.user.tag}`);
 });
 

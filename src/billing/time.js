@@ -39,6 +39,48 @@ function berlinMonth(date) {
     return berlinDate(date).slice(0, 7);
 }
 
+/** Datum und Uhrzeit in Berliner Zeit: { date: 'YYYY-MM-DD', hour, minute }. */
+function berlinClock(date) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: rules.timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+    }).formatToParts(date);
+
+    const pick = type => parts.find(part => part.type === type)?.value;
+    return {
+        date: `${pick('year')}-${pick('month')}-${pick('day')}`,
+        hour: Number(pick('hour')),
+        minute: Number(pick('minute')),
+    };
+}
+
+/** Alle Monate von first bis last, beide eingeschlossen. */
+function monthsBetween(first, last) {
+    assertMonth(first);
+    assertMonth(last);
+
+    const months = [];
+    let [year, month] = first.split('-').map(Number);
+
+    for (; ;) {
+        const key = `${year}-${String(month).padStart(2, '0')}`;
+        if (key > last) break;
+        months.push(key);
+        month += 1;
+        if (month > 12) {
+            month = 1;
+            year += 1;
+        }
+    }
+
+    return months;
+}
+
 /** Ein Monat ist abgeschlossen, sobald in Berlin ein späterer Monat begonnen hat. */
 function isMonthClosed(month, now = new Date()) {
     assertMonth(month);
@@ -82,6 +124,8 @@ module.exports = {
     parseTimestamp,
     berlinDate,
     berlinMonth,
+    berlinClock,
+    monthsBetween,
     isMonthClosed,
     monthWindowMs,
     taskStartedInWindow,

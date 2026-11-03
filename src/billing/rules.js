@@ -24,7 +24,7 @@ module.exports = Object.freeze({
     fineEurPerKmh: games.ets2.finePerUnit,
 
     // Aufträge, die davor abgeschlossen wurden, werden nie abgerechnet (Datum in Berliner Zeit)
-    billingStartDate: '2026-11-01',
+    billingStartDate: '2026-10-01',
 
     timeZone: 'Europe/Berlin',
 

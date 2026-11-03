@@ -17,6 +17,19 @@ function readLinks() {
     }
 }
 
+/**
+ * Liest die Discord-ID aus einem Link-Eintrag.
+ * Unterstützt das alte Format (Text/Zahl) und das neue Format ({ discordId, ... }).
+ */
+function discordIdOf(value) {
+    const raw =
+        value && typeof value === 'object' && !Array.isArray(value)
+            ? value.discordId
+            : value;
+    const id = String(raw ?? '').trim();
+    return /^\d{17,20}$/.test(id) ? id : null;
+}
+
 /** Alle Rollen, die der Bot verwalten darf. Alles andere bleibt unangetastet. */
 function managedRoleIds(guildId) {
     return [process.env.ETS_ROLE_ID, ...allRankRoleIds(guildId)].filter(Boolean);
@@ -38,7 +51,6 @@ function targetRoleIds(driver, guildId) {
 
     const rankName = driver.rank?.name;
     const rank = findRank(rankName);
-
     if (!rank) {
         return {
             skip: true,
@@ -54,7 +66,6 @@ function targetRoleIds(driver, guildId) {
     }
 
     const rankRoleId = getRankRoleId(guildId, rank);
-
     if (!rankRoleId) {
         return {
             skip: true,
@@ -77,6 +88,7 @@ function targetRoleIds(driver, guildId) {
         ])],
     };
 }
+
 /** Gleicht die Rollen eines Members mit dem SpedV-Stand ab. driver = null entzieht alles. */
 async function applyRoles(member, driver, reason) {
     const guildId = member.guild.id;
@@ -104,7 +116,6 @@ async function applyRoles(member, driver, reason) {
     if (toAdd.length) {
         await member.roles.add(toAdd, reason);
     }
-
     if (toRemove.length) {
         await member.roles.remove(toRemove, reason);
     }
@@ -128,26 +139,62 @@ async function runSync(client) {
         logger.error('RoleSync: abgebrochen (SpedV nicht erreichbar)', err);
         return;
     }
+
     if (!users.length) {
         logger.warn('RoleSync: leere Mitgliederliste, abgebrochen (Schutz vor Massen-Entzug)');
         return;
     }
 
     // Zusatzmodule: Fehler hier dürfen den Rollen-Sync nicht stoppen
-    await checkNewDrivers(guild, users).catch(err => logger.error('Welcome: Unerwarteter Fehler', err));
-    await checkPromotions(guild, users).catch(err => logger.error('Promotion: Unerwarteter Fehler', err));
+    await checkNewDrivers(guild, users).catch(err =>
+        logger.error('Welcome: Unerwarteter Fehler', err)
+    );
+    await checkPromotions(guild, users).catch(err =>
+        logger.error('Promotion: Unerwarteter Fehler', err)
+    );
 
     let changes = 0;
-    for (const [spedvName, discordId] of Object.entries(readLinks())) {
+
+    for (const [spedvName, value] of Object.entries(readLinks())) {
+        const discordId = discordIdOf(value);
+        if (!discordId) {
+            logger.warn(`RoleSync: Ungültige Discord-ID bei "${spedvName}"; übersprungen`);
+            continue;
+        }
+
         const member = await guild.members.fetch(discordId).catch(() => null);
-        if (!member) continue;
+        // Schutz: fetch(ID) muss genau ein Mitglied liefern (nicht z. B. eine Collection)
+        if (!member || !member.roles || !member.guild) continue;
 
         try {
-            const driver = findDriver( users, [spedvName], { includeInactive: true } );
-            if (!driver) { logger.warn( `RoleSync: Kein SpedV-Datensatz für "${spedvName}" ` + `(Discord ${discordId}); Rollen unverändert gelassen` );
-                continue; }
-            const result = await applyRoles( member, driver, 'SpedV-Rollen-Sync' );
-            if (result.skipped) { logger.warn( `RoleSync: ${spedvName}: ${result.reason}; ` + 'Rollen unverändert gelassen' ); continue; }
+            const driver = findDriver(
+                users,
+                [spedvName],
+                { includeInactive: true }
+            );
+
+            if (!driver) {
+                logger.warn(
+                    `RoleSync: Kein SpedV-Datensatz für "${spedvName}" ` +
+                    `(Discord ${discordId}); Rollen unverändert gelassen`
+                );
+                continue;
+            }
+
+            const result = await applyRoles(
+                member,
+                driver,
+                'SpedV-Rollen-Sync'
+            );
+
+            if (result.skipped) {
+                logger.warn(
+                    `RoleSync: ${spedvName}: ${result.reason}; ` +
+                    'Rollen unverändert gelassen'
+                );
+                continue;
+            }
+
             changes += result.added + result.removed;
         } catch (err) {
             logger.error(`RoleSync: Fehler bei ${spedvName}`, err);
@@ -159,7 +206,10 @@ async function runSync(client) {
 
 function startRoleSync(client) {
     const minutes = Number(process.env.ROLE_SYNC_MINUTES) || 10;
-    const safeRun = () => runSync(client).catch(err => logger.error('RoleSync: Unerwarteter Fehler', err));
+    const safeRun = () =>
+        runSync(client).catch(err =>
+            logger.error('RoleSync: Unerwarteter Fehler', err)
+        );
 
     setTimeout(safeRun, 15_000);
     setInterval(safeRun, minutes * 60_000);

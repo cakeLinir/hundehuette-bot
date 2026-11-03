@@ -20,6 +20,7 @@ const item = (id, overrides = {}) => ({
     id,
     state: 2,
     userID: 169742,
+    currency: 'EUR',
     startTime: '2026-11-15T16:00:00+01:00',
     ddCleaned: false,
     ...overrides,
@@ -29,10 +30,12 @@ const detailsFor = (overrides = {}) => ({
     state: 2,
     spedition: { id: 108570 },
     user: { id: 169742, userName: 'hundekuchen' },
+    currency: 'EUR',
     starttime: '2026-11-15T16:00:00+01:00',
     endtime: '2026-11-15T18:00:00+01:00',
     ddCleaned: false,
     maxVelocityKMH: 100,
+    maxVelocityMPH: 62,
     ...overrides,
 });
 
@@ -79,7 +82,10 @@ test('Neue Strafe wird gespeichert und im Bericht gemeldet', async () => {
     assert.equal(report.newFines.length, 1);
     assert.equal(report.newFines[0].fineEur, 500);
     assert.equal(report.newFines[0].visibleId, '#1');
+    assert.equal(report.newFines[0].game, 'ets2');
+    assert.equal(report.newFines[0].unit, 'kmh');
     assert.equal(store.getEffective('1').effective_status, 'fine');
+    assert.equal(store.getEffective('1').game, 'ets2');
     store.close();
 });
 
@@ -156,7 +162,7 @@ test('Prüffall: einmal gemeldet, später von selbst gelöst', async () => {
     store.close();
 });
 
-test('Details nicht ladbar: Prüffall mit Monat, blockiert nur diesen Fahrer', async () => {
+test('Details nicht ladbar: Prüffall mit Monat und Spiel, blockiert nur diesen Fahrer', async () => {
     const store = openStore({ file: ':memory:' });
     const client = fakeClient({ tasks: [item(9)] });
     client.detailsError.add('9');
@@ -164,6 +170,7 @@ test('Details nicht ladbar: Prüffall mit Monat, blockiert nur diesen Fahrer', a
     const report = await run(client, store);
     assert.equal(report.newReviews[0].reason, 'details_unavailable');
     assert.equal(store.getEffective('9').billing_month, '2026-11');
+    assert.equal(store.getEffective('9').game, 'ets2');
     assert.equal(store.listBlockingReviews({ month: '2026-11', spedvUserId: '169742' }).length, 1);
     assert.equal(store.listBlockingReviews({ month: '2026-11', spedvUserId: '200' }).length, 0);
 
@@ -333,5 +340,67 @@ test('Ausfall der Auftragsliste: Fehler, danach läuft es wieder', async () => {
     client.failList = false;
     const report = await run(client, store);
     assert.equal(report.stored.inserted, 1);
+    store.close();
+});
+
+test('ATS-Auftrag (USD) wird nach mph bewertet: 85 mph bei Limit 80 = 500 EUR', async () => {
+    const store = openStore({ file: ':memory:' });
+    const client = fakeClient({
+        tasks: [item(51, { currency: 'USD' })],
+        details: { 51: detailsFor({ currency: 'USD', maxVelocityKMH: 137, maxVelocityMPH: 85 }) },
+        drive: { 51: points(110, 137) },
+    });
+
+    const report = await run(client, store);
+    assert.equal(report.newFines.length, 1);
+    assert.equal(report.newFines[0].game, 'ats');
+    assert.equal(report.newFines[0].unit, 'mph');
+    assert.equal(report.newFines[0].maxSpeed, 85);
+    assert.equal(report.newFines[0].fineEur, 500);
+    assert.equal(store.getEffective('51').game, 'ats');
+    store.close();
+});
+
+test('ATS genau am Limit (Raptus: 129 km/h = 80 mph) kostet nichts', async () => {
+    const store = openStore({ file: ':memory:' });
+    const client = fakeClient({
+        tasks: [item(52, { currency: 'USD' }), item(53, { currency: 'USD' })],
+        details: {
+            52: detailsFor({ currency: 'USD', maxVelocityKMH: 129, maxVelocityMPH: 80 }),
+            53: detailsFor({ currency: 'USD', maxVelocityKMH: 113, maxVelocityMPH: 70 }),
+        },
+        drive: { 52: points(100, 129), 53: points(100, 113) },
+    });
+
+    const report = await run(client, store);
+    assert.equal(report.outcomes.clear, 2);
+    assert.equal(report.newFines.length, 0);
+    store.close();
+});
+
+test('Unbekannte Währung: Prüffall, nie eine Strafe', async () => {
+    const store = openStore({ file: ':memory:' });
+    const client = fakeClient({
+        tasks: [item(54, { currency: 'GBP' })],
+        details: { 54: detailsFor({ currency: 'GBP' }) },
+    });
+
+    const report = await run(client, store);
+    assert.equal(report.newReviews[0].reason, 'game_unknown');
+    assert.equal(store.getEffective('54').game, null);
+    assert.equal(client.calls.drive, 0);
+    store.close();
+});
+
+test('Liste und Details widersprechen sich bei der Währung: Prüffall', async () => {
+    const store = openStore({ file: ':memory:' });
+    const client = fakeClient({
+        tasks: [item(55, { currency: 'EUR' })],
+        details: { 55: detailsFor({ currency: 'USD' }) },
+    });
+
+    const report = await run(client, store);
+    assert.equal(report.newReviews[0].reason, 'game_conflict');
+    assert.equal(client.calls.drive, 0);
     store.close();
 });

@@ -21,6 +21,8 @@ function printList(title, list, format, limit = 10) {
     if (list.length > limit) console.log(`  ... und ${list.length - limit} weitere`);
 }
 
+const unitLabel = unit => (unit === 'mph' ? 'mph' : 'km/h');
+
 async function main() {
     if (!process.env.HKC_BILLING_DB && !process.argv.includes('--use-default-db')) {
         throw new Error(
@@ -69,9 +71,10 @@ async function main() {
         console.log(`Offene Aufträge:        ${report.openTaskCount} (Done/Paused)`);
 
         printList('Neue Strafen', report.newFines, f =>
-            `${f.visibleId} | ${f.spedvName} | ${f.billingMonth} | ${f.maxVelocityKmh} km/h | ${f.fineEur} EUR`);
+            `${f.visibleId} | ${f.spedvName} | ${f.billingMonth} | ${f.game ?? '?'} | ` +
+            `${f.maxSpeed ?? f.maxVelocityKmh} ${unitLabel(f.unit)} | ${f.fineEur} EUR`);
         printList('Neue Prüffälle', report.newReviews, r =>
-            `${r.visibleId} | ${r.spedvName ?? 'unbekannt'} | ${r.reason} | ${r.message}`);
+            `${r.visibleId} | ${r.spedvName ?? 'unbekannt'} | ${r.game ?? '?'} | ${r.reason} | ${r.message}`);
         printList('Wieder geöffnet', report.reopened, r => `${r.visibleId} | ${r.spedvName} | ${r.message}`);
         printList('Rechnung prüfen (Status geändert)', report.staleInvoiced, r =>
             `${r.visibleId} | ${r.spedvName} | ${r.billingMonth} | ${r.message}`);

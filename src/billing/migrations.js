@@ -3,6 +3,7 @@
 /**
  * Schema-Versionen. Eine veröffentlichte Version wird nie geändert,
  * Änderungen kommen immer als neuer Eintrag am Ende.
+ * (Version 1 und 2 sind noch nirgends im Einsatz und durften deshalb ergänzt werden.)
  */
 module.exports = [
     // Version 1: Aufträge, Entscheidungen, Protokoll
@@ -22,6 +23,7 @@ module.exports = [
     excess_kmh       INTEGER,
     fine_eur         INTEGER NOT NULL DEFAULT 0 CHECK (fine_eur >= 0),
     evidence_json    TEXT,
+    game             TEXT CHECK (game IS NULL OR game IN ('ets2', 'ats')),
     evaluated_at     TEXT NOT NULL,
     updated_at       TEXT NOT NULL
   );

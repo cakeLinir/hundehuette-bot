@@ -43,6 +43,13 @@ function validateResult(result) {
     ) {
         throw new TypeError('Ungültiger Abrechnungsmonat.');
     }
+    if (
+        result.game !== undefined &&
+        result.game !== null &&
+        !Object.hasOwn(rules.games, result.game)
+    ) {
+        throw new TypeError(`Unbekanntes Spiel "${result.game}".`);
+    }
 }
 
 function toValues(result) {
@@ -61,6 +68,8 @@ function toValues(result) {
         excessKmh: result.evidence?.excessKmh ?? null,
         fineEur: result.outcome === 'fine' ? Number(result.evidence.fineEur) : 0,
         evidenceJson: result.evidence ? JSON.stringify(result.evidence) : null,
+        // Ergebnisse ohne Spielangabe (ältere Aufrufer) gelten als ETS2, null = nicht erkennbar
+        game: result.game === undefined ? 'ets2' : result.game,
     };
 }
 
@@ -71,13 +80,13 @@ function createTaskApi({ db, transaction, writeAudit }) {
       INSERT INTO tasks (
         task_id, visible_id, spedv_user_id, spedv_name, task_state, completed_at,
         billing_month, outcome, reason, message, max_velocity_kmh, excess_kmh,
-        fine_eur, evidence_json, evaluated_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+        fine_eur, evidence_json, game, evaluated_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
         updateTask: db.prepare(`
       UPDATE tasks SET
         visible_id = ?, spedv_user_id = ?, spedv_name = ?, task_state = ?, completed_at = ?,
         billing_month = ?, outcome = ?, reason = ?, message = ?, max_velocity_kmh = ?,
-        excess_kmh = ?, fine_eur = ?, evidence_json = ?, updated_at = ?
+        excess_kmh = ?, fine_eur = ?, evidence_json = ?, game = ?, updated_at = ?
       WHERE task_id = ?`),
         reopenTask: db.prepare(`
       UPDATE tasks SET outcome = 'review', reason = ?, message = ?, fine_eur = 0, updated_at = ?
@@ -137,11 +146,12 @@ function createTaskApi({ db, transaction, writeAudit }) {
                 st.insertTask.run(
                     v.taskId, v.visibleId, v.spedvUserId, v.spedvName, v.taskState, v.completedAt,
                     v.billingMonth, v.outcome, v.reason, v.message, v.maxVelocityKmh, v.excessKmh,
-                    v.fineEur, v.evidenceJson, now, now
+                    v.fineEur, v.evidenceJson, v.game, now, now
                 );
                 writeAudit(actor, 'task_recorded', v.taskId, {
                     outcome: v.outcome,
                     reason: v.reason,
+                    game: v.game,
                     fineEur: v.fineEur,
                 });
                 return { action: 'inserted', outcome: v.outcome };
@@ -157,7 +167,8 @@ function createTaskApi({ db, transaction, writeAudit }) {
                 existing.message === v.message &&
                 existing.task_state === v.taskState &&
                 existing.billing_month === v.billingMonth &&
-                existing.spedv_user_id === v.spedvUserId;
+                existing.spedv_user_id === v.spedvUserId &&
+                existing.game === v.game;
 
             if (sameReview) {
                 return { action: 'unchanged', outcome: 'review' };
@@ -166,13 +177,13 @@ function createTaskApi({ db, transaction, writeAudit }) {
             st.updateTask.run(
                 v.visibleId, v.spedvUserId, v.spedvName, v.taskState, v.completedAt,
                 v.billingMonth, v.outcome, v.reason, v.message, v.maxVelocityKmh,
-                v.excessKmh, v.fineEur, v.evidenceJson, now, v.taskId
+                v.excessKmh, v.fineEur, v.evidenceJson, v.game, now, v.taskId
             );
             writeAudit(
                 actor,
                 v.outcome === 'review' ? 'review_updated' : 'review_resolved_by_evaluation',
                 v.taskId,
-                { outcome: v.outcome, reason: v.reason, fineEur: v.fineEur }
+                { outcome: v.outcome, reason: v.reason, game: v.game, fineEur: v.fineEur }
             );
             return { action: 'updated', outcome: v.outcome };
         });
@@ -239,8 +250,11 @@ function createTaskApi({ db, transaction, writeAudit }) {
      * waive   = Ausnahme genehmigt (§ 5.3), kostet 0 €
      * dismiss = Prüffall geklärt, kein Verstoß
      * assess  = Prüffall geklärt, Strafe nach festgestellter Geschwindigkeit
+     *
+     * Bei "assess" ist die Geschwindigkeit in der Einheit des Spiels anzugeben:
+     * km/h bei ETS2, mph bei ATS ("speed"; "speedKmh" bleibt als Kurzform für ETS2).
      */
-    function decide({ taskId, kind, reason, actor, speedKmh = null }) {
+    function decide({ taskId, kind, reason, actor, speed = null, speedKmh = null }) {
         const id = String(taskId ?? '').trim();
         if (!DECISION_KINDS.includes(kind)) {
             throw new StoreError('Unbekannte Entscheidungsart.');
@@ -248,17 +262,15 @@ function createTaskApi({ db, transaction, writeAudit }) {
         const why = requireText(reason, 'Die Begründung', 3, 500);
         const who = requireText(actor, 'Die ausführende Person', 1, 64);
 
-        let excessKmh = null;
-        let fineEur = 0;
-        let speed = null;
+        if (speed !== null && speedKmh !== null) {
+            throw new StoreError('Bitte nur eine Geschwindigkeitsangabe machen.');
+        }
 
-        if (kind === 'assess') {
-            speed = Number(speedKmh);
-            if (speedKmh === null || !Number.isFinite(speed) || speed < 0 || speed > 400) {
-                throw new StoreError('Für die Festsetzung ist eine gültige Geschwindigkeit nötig.');
-            }
-            excessKmh = Math.max(0, Math.ceil(speed) - rules.speedLimitKmh);
-            fineEur = excessKmh * rules.fineEurPerKmh;
+        const given = speed !== null ? speed : speedKmh;
+        const value = Number(given);
+
+        if (kind === 'assess' && (given === null || !Number.isFinite(value) || value < 0 || value > 400)) {
+            throw new StoreError('Für die Festsetzung ist eine gültige Geschwindigkeit nötig.');
         }
 
         return transaction(() => {
@@ -275,8 +287,30 @@ function createTaskApi({ db, transaction, writeAudit }) {
                 throw new StoreError('Für diesen Auftrag gibt es schon eine Entscheidung. Widerrufe sie zuerst.');
             }
 
-            st.insertDecision.run(id, kind, speed, excessKmh, fineEur, why, who, new Date().toISOString());
-            writeAudit(who, `decision_${kind}`, id, { reason: why, speedKmh: speed, fineEur });
+            let speedForRow = null;
+            let excessKmh = null;
+            let fineEur = 0;
+            let detail = null;
+
+            if (kind === 'assess') {
+                const gameRules = rules.games[task.game];
+                if (!gameRules) {
+                    throw new StoreError('Das Spiel des Auftrags ist nicht bekannt. Eine Festsetzung ist nicht möglich.');
+                }
+
+                const excessUnits = Math.max(0, Math.ceil(value) - gameRules.limit);
+                fineEur = excessUnits * gameRules.finePerUnit;
+
+                // Gespeichert wird die physikalische Geschwindigkeit in km/h
+                speedForRow = gameRules.unit === 'mph'
+                    ? Math.round(value * rules.kmhPerMph * 100) / 100
+                    : value;
+                excessKmh = gameRules.unit === 'kmh' ? excessUnits : null;
+                detail = { speed: value, unit: gameRules.unit, excessUnits };
+            }
+
+            st.insertDecision.run(id, kind, speedForRow, excessKmh, fineEur, why, who, new Date().toISOString());
+            writeAudit(who, `decision_${kind}`, id, { reason: why, fineEur, ...detail });
 
             return plain(st.getEffective.get(id));
         });

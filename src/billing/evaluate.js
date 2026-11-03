@@ -25,11 +25,18 @@ const REASONS = Object.freeze({
     IDENTITY_MISSING: 'identity_missing',
     IDENTITY_MISMATCH: 'identity_mismatch',
     CLEANED_TELEMETRY: 'cleaned_telemetry',
+    GAME_UNKNOWN: 'game_unknown',
+    GAME_CONFLICT: 'game_conflict',
     MISSING_TELEMETRY: 'missing_telemetry',
     INCOMPLETE_TELEMETRY: 'incomplete_telemetry',
     MISSING_SPEED_SUMMARY: 'missing_speed_summary',
     SPEED_CONFLICT: 'speed_conflict',
 });
+
+const UNIT_LABEL = Object.freeze({ kmh: 'km/h', mph: 'mph' });
+
+// Zulässige Abweichung zwischen der umgerechneten Telemetrie und dem MPH-Wert von SpedV
+const MPH_TOLERANCE = 1;
 
 function isBillableState(state) {
     return rules.billableStates.includes(Number(state));
@@ -39,7 +46,28 @@ function stateName(state) {
     return rules.stateNames[String(state)] ?? `Status ${state}`;
 }
 
-function inspectTelemetry(data) {
+/** EUR -> ets2, USD -> ats, alles andere -> null. */
+function gameFromCurrency(currency) {
+    const key = String(currency ?? '').trim().toUpperCase();
+    return key ? (rules.currencyGames[key] ?? null) : null;
+}
+
+/**
+ * Erkennt das Spiel aus den Währungen der übergebenen Quellen (Liste, Details).
+ * Fehlende Währungen werden ignoriert. Ist keine bekannt, ist eine unbekannt oder
+ * widersprechen sich die Quellen, ist das Ergebnis null.
+ */
+function detectGame(...sources) {
+    const games = sources
+        .map(source => String(source?.currency ?? '').trim())
+        .filter(Boolean)
+        .map(gameFromCurrency);
+
+    if (games.length === 0 || games.includes(null)) return null;
+    return games.every(game => game === games[0]) ? games[0] : null;
+}
+
+function inspectTelemetry(data, limitKmh = rules.speedLimitKmh) {
     const incomplete = message => ({
         ok: false,
         reason: REASONS.INCOMPLETE_TELEMETRY,
@@ -78,7 +106,7 @@ function inspectTelemetry(data) {
             continue;
         }
 
-        if (speed > rules.speedLimitKmh) pointsAboveLimit += 1;
+        if (speed > limitKmh) pointsAboveLimit += 1;
 
         if (maxVelocity === null || speed > maxVelocity) {
             maxVelocity = speed;
@@ -100,6 +128,10 @@ function inspectTelemetry(data) {
     };
 }
 
+function validSpeed(raw) {
+    return raw !== null && raw !== undefined && raw !== '' && Number.isFinite(Number(raw)) && Number(raw) >= 0;
+}
+
 /**
  * Wertet einen Auftrag aus. Reine Logik: kein Speicher, kein Discord.
  *
@@ -109,6 +141,8 @@ function inspectTelemetry(data) {
  * @param {Function} input.loadDriveData async () => Telemetrie-Array; wird nur bei Bedarf aufgerufen
  * @param {object} context
  * @param {string} context.speditionId   Unsere Speditions-ID
+ * @param {string|null} [context.game]   'ets2' | 'ats'. null = nicht erkennbar (Prüffall).
+ *                                       Ohne Angabe wird ETS2 angenommen.
  */
 async function evaluateTask({ listItem, details, loadDriveData }, context) {
     const ownSpeditionId = String(context?.speditionId ?? '').trim();
@@ -119,6 +153,8 @@ async function evaluateTask({ listItem, details, loadDriveData }, context) {
         throw new TypeError('listItem.id fehlt.');
     }
 
+    const game = context?.game === undefined ? 'ets2' : context.game;
+
     const taskId = String(listItem.id);
     const detailsUserId = String(details?.user?.id ?? '').trim();
     const listUserId = String(listItem.userID ?? '').trim();
@@ -126,6 +162,7 @@ async function evaluateTask({ listItem, details, loadDriveData }, context) {
     const base = {
         taskId,
         visibleId: formatVisibleId(taskId),
+        game,
         taskState: Number(details?.state ?? listItem.state),
         speditionId: String(details?.spedition?.id ?? '').trim() || null,
         spedvUserId: detailsUserId || listUserId || null,
@@ -197,6 +234,29 @@ async function evaluateTask({ listItem, details, loadDriveData }, context) {
         );
     }
 
+    if (game === null) {
+        return review(
+            REASONS.GAME_UNKNOWN,
+            'Das Spiel (ETS2 oder ATS) ist nicht erkennbar. Keine automatische Bewertung.'
+        );
+    }
+
+    const gameRules = rules.games[game];
+    if (!gameRules) throw new TypeError(`Unbekanntes Spiel: ${game}`);
+
+    // Gegenprobe: die Währung in den Details muss zum angenommenen Spiel passen
+    const detailsCurrency = String(details.currency ?? '').trim();
+    if (detailsCurrency && gameFromCurrency(detailsCurrency) !== game) {
+        return review(
+            REASONS.GAME_CONFLICT,
+            `Die Währung ${detailsCurrency} passt nicht zum erkannten Spiel.`
+        );
+    }
+
+    const label = UNIT_LABEL[gameRules.unit];
+    const isMph = gameRules.unit === 'mph';
+    const limitKmh = isMph ? gameRules.limit * rules.kmhPerMph : gameRules.limit;
+
     let driveData;
     try {
         driveData = await loadDriveData();
@@ -204,58 +264,87 @@ async function evaluateTask({ listItem, details, loadDriveData }, context) {
         return review(REASONS.MISSING_TELEMETRY, `Telemetrie nicht abrufbar: ${error.message}`);
     }
 
-    const telemetry = inspectTelemetry(driveData);
+    const telemetry = inspectTelemetry(driveData, limitKmh);
     if (!telemetry.ok) {
         return review(telemetry.reason, telemetry.message);
     }
 
-    const rawSummary = details.maxVelocityKMH;
-    if (
-        rawSummary === null ||
-        rawSummary === undefined ||
-        rawSummary === '' ||
-        !Number.isFinite(Number(rawSummary)) ||
-        Number(rawSummary) < 0
-    ) {
+    if (!validSpeed(details.maxVelocityKMH)) {
         return review(
             REASONS.MISSING_SPEED_SUMMARY,
             'SpedV-Höchstgeschwindigkeit fehlt oder ist ungültig.'
         );
     }
 
-    const summaryMax = Number(rawSummary);
-    if (Math.floor(summaryMax) !== Math.floor(telemetry.maxVelocityKmh)) {
+    const summaryMaxKmh = Number(details.maxVelocityKMH);
+    if (Math.floor(summaryMaxKmh) !== Math.floor(telemetry.maxVelocityKmh)) {
         return review(
             REASONS.SPEED_CONFLICT,
-            `SpedV meldet ${Math.floor(summaryMax)} km/h, die Telemetrie ${Math.floor(telemetry.maxVelocityKmh)} km/h.`,
+            `SpedV meldet ${Math.floor(summaryMaxKmh)} km/h, die Telemetrie ${Math.floor(telemetry.maxVelocityKmh)} km/h.`,
             {
                 evidence: {
-                    summaryMaxVelocityKmh: Math.floor(summaryMax),
+                    summaryMaxVelocityKmh: Math.floor(summaryMaxKmh),
                     telemetryMaxVelocityKmh: Math.floor(telemetry.maxVelocityKmh),
                 },
             }
         );
     }
 
-    // § 5.4: je angefangenem km/h über dem Limit
-    const excessKmh = Math.max(0, Math.ceil(telemetry.maxVelocityKmh) - rules.speedLimitKmh);
-    const fineEur = excessKmh * rules.fineEurPerKmh;
+    // Maßgeblich ist der Wert in der Einheit des Spiels
+    let maxSpeed = telemetry.maxVelocityKmh;
+
+    if (isMph) {
+        if (!validSpeed(details.maxVelocityMPH)) {
+            return review(
+                REASONS.MISSING_SPEED_SUMMARY,
+                'SpedV-Höchstgeschwindigkeit in mph fehlt oder ist ungültig.'
+            );
+        }
+
+        const summaryMph = Number(details.maxVelocityMPH);
+        const telemetryMph = telemetry.maxVelocityKmh / rules.kmhPerMph;
+
+        if (Math.abs(telemetryMph - summaryMph) > MPH_TOLERANCE) {
+            return review(
+                REASONS.SPEED_CONFLICT,
+                `SpedV meldet ${Math.floor(summaryMph)} mph, die Telemetrie entspricht ${telemetryMph.toFixed(1)} mph.`,
+                {
+                    evidence: {
+                        summaryMaxVelocityMph: summaryMph,
+                        telemetryMaxVelocityMph: Number(telemetryMph.toFixed(1)),
+                    },
+                }
+            );
+        }
+
+        maxSpeed = summaryMph;
+    }
+
+    // § 5.4 und § 5.9: je angefangener Einheit über dem Limit
+    const excessUnits = Math.max(0, Math.ceil(maxSpeed) - gameRules.limit);
+    const fineEur = excessUnits * gameRules.finePerUnit;
 
     const evidence = {
+        game,
+        unit: gameRules.unit,
+        maxSpeed,
+        limit: gameRules.limit,
+        excessUnits,
+        fineEur,
+        // physikalische Werte aus der Telemetrie (immer km/h)
         maxVelocityKmh: telemetry.maxVelocityKmh,
+        limitKmh: Number(limitKmh.toFixed(2)),
+        excessKmh: isMph ? null : excessUnits,
         maxVelocityAt: telemetry.maxVelocityAt,
         telemetryPoints: telemetry.points,
         pointsAboveLimit: telemetry.pointsAboveLimit,
         invalidVelocityPoints: telemetry.invalidVelocityPoints,
-        limitKmh: rules.speedLimitKmh,
-        excessKmh,
-        fineEur,
     };
 
     if (fineEur > 0) {
         return done(OUTCOMES.FINE, {
             evidence,
-            message: `${telemetry.maxVelocityKmh} km/h bei Limit ${rules.speedLimitKmh}: ${excessKmh} km/h zu schnell, ${fineEur} EUR.`,
+            message: `${maxSpeed} ${label} bei Limit ${gameRules.limit}: ${excessUnits} ${label} zu schnell, ${fineEur} EUR.`,
         });
     }
 
@@ -266,6 +355,8 @@ module.exports = {
     OUTCOMES,
     REASONS,
     evaluateTask,
+    detectGame,
+    gameFromCurrency,
     isBillableState,
     stateName,
     formatVisibleId,

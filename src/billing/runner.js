@@ -6,6 +6,7 @@ const {
     OUTCOMES,
     REASONS,
     evaluateTask,
+    detectGame,
     isBillableState,
     stateName,
 } = require('./evaluate');
@@ -142,9 +143,12 @@ async function execute({ client, store, speditionId, at, createDrafts, maxEvalua
                 details = null; // wird als Prüffall "Details nicht ladbar" ausgewertet
             }
 
+            // Spiel aus der Währung der Liste; die Auswertung prüft es gegen die Details
+            const game = detectGame(listItem);
+
             const result = await evaluateTask(
                 { listItem, details, loadDriveData: () => client.fetchDriveData(taskId) },
-                { speditionId }
+                { speditionId, game }
             );
             report.evaluated += 1;
 
@@ -174,6 +178,9 @@ async function execute({ client, store, speditionId, at, createDrafts, maxEvalua
                         spedvUserId: result.spedvUserId,
                         spedvName: result.spedvName,
                         billingMonth: result.billingMonth,
+                        game: result.game,
+                        unit: result.evidence.unit,
+                        maxSpeed: result.evidence.maxSpeed,
                         maxVelocityKmh: result.evidence.maxVelocityKmh,
                         fineEur: result.evidence.fineEur,
                     });
@@ -184,6 +191,7 @@ async function execute({ client, store, speditionId, at, createDrafts, maxEvalua
                         spedvUserId: result.spedvUserId,
                         spedvName: result.spedvName,
                         billingMonth: result.billingMonth,
+                        game: result.game,
                         reason: result.reason,
                         message: result.message,
                     });

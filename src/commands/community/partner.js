@@ -94,11 +94,20 @@ async function handleLink(interaction) {
 
     const driver = users.find(user => norm(user.userName) === norm(givenName));
     if (!driver) {
+        const visible = new Set(users.map(u => u.spedition.id));
+        const silent = partners.filter(p => !visible.has(p.id));
+        if (silent.length) {
+            logger.warn(
+                `Partner: Keine Fahrer abrufbar für: ${silent.map(p => `${p.shortName ?? p.name} (${p.id})`).join(', ')}`
+            );
+        }
         return fail(
             interaction,
             'Ich finde diesen Namen bei keiner unserer Partnerspeditionen. Prüfe die Schreibweise.\n' +
-            'Ist deine Spedition erst kürzlich Partner geworden, versuche es in ein paar Minuten erneut. ' +
-            'Sind Fahrer deiner Spedition in SpedV nicht abrufbar, melde dich bei der Geschäftsführung.'
+            (silent.length
+                ? `Von ${silent.map(p => p.shortName ?? p.name ?? p.id).join(', ')} sind aktuell keine Fahrer abrufbar. ` +
+                'Die Geschäftsführung muss die Partnerschaft in SpedV in beide Richtungen bestätigen.'
+                : 'Ist deine Spedition erst kürzlich Partner geworden, versuche es in ein paar Minuten erneut.')
         );
     }
 

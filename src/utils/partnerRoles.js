@@ -7,7 +7,11 @@ const logger = require('./logger');
 const { createEmbed } = require('./embedBuilder');
 const { getGuildSettings, setGuildSettings } = require('./settingsManager');
 const { isModuleEnabled } = require('./moduleManager');
-const { fetchAcceptedPartners, fetchPartnerUsers } = require('./spedvPartners');
+const {
+    fetchAcceptedPartners,
+    fetchPartnerUsers,
+    fetchPartnerProfile,
+} = require('./spedvPartners');
 
 // Erst nach so vielen aufeinanderfolgenden Abgleichen ohne Nachweis wird etwas entzogen.
 const MISSING_RUNS_BEFORE_REMOVAL = 2;
@@ -81,7 +85,6 @@ function setPartnerLink({ discordId, spedvName, spedvUserId, speditionId }) {
     if (!/^\d+$/.test(cleanSpeditionId)) throw new TypeError('Ungültige Speditions-ID.');
 
     const links = loadLinks();
-
     const owner = links[cleanUserId];
     if (owner && owner.discordId !== cleanDiscordId) {
         throw new PartnerLinkError(
@@ -190,7 +193,6 @@ async function ensurePartnerRole(guild, partner, registry) {
         missingRuns: 0,
         updatedAt: new Date().toISOString(),
     };
-
     return { role, created };
 }
 
@@ -239,13 +241,28 @@ async function tryRemoveRole(member, roleId, reason) {
 async function notifyLeaders(guild, title, text) {
     const channelId = process.env.ETS_LEADER_CHANNEL_ID;
     if (!channelId) return;
-
     const channel = await guild.channels.fetch(channelId).catch(() => null);
     if (!channel?.isTextBased()) return;
-
     await channel
         .send({ embeds: [createEmbed('info', title, text)], allowedMentions: { parse: [] } })
         .catch(error => logger.error('Partner: Leitungs-Hinweis konnte nicht gesendet werden', error));
+}
+
+/**
+ * Fallback für Fahrer, die getusers nicht liefert (z. B. DVR).
+ * @returns profile | null (nicht mehr aktiv bei einem aktiven Partner) | undefined (API-Problem)
+ */
+async function lookupProfile(userId, activeIds) {
+    try {
+        const profile = await fetchPartnerProfile(userId);
+        if (profile && profile.inSped !== false && activeIds.has(profile.spedition.id)) {
+            return profile;
+        }
+        return null;
+    } catch (error) {
+        logger.warn(`Partner: Profil ${userId} nicht abrufbar (${error.message})`);
+        return undefined;
+    }
 }
 
 async function runSync(guild) {
@@ -261,9 +278,7 @@ async function runSync(guild) {
     let partnerUsers;
     try {
         partners = await fetchAcceptedPartners();
-        partnerUsers = partners.length
-            ? await fetchPartnerUsers(partners.map(p => p.id))
-            : [];
+        partnerUsers = partners.length ? await fetchPartnerUsers(partners.map(p => p.id)) : [];
     } catch (error) {
         // Bei jedem API-Problem bleibt alles unverändert.
         logger.error('Partner-Sync abgebrochen (SpedV nicht erreichbar)', error);
@@ -271,7 +286,6 @@ async function runSync(guild) {
     }
 
     await guild.roles.fetch();
-
     const registry = readRegistry(guild.id);
     const links = loadLinks();
     let linksChanged = false;
@@ -343,7 +357,14 @@ async function runSync(guild) {
 
     for (const [spedvId, link] of Object.entries(links)) {
         if (!link) continue;
-        const user = usersById.get(spedvId);
+
+        let user = usersById.get(spedvId);
+
+        // Fahrer, die getusers nicht liefert, werden einzeln per Profil geprüft.
+        if (!user && activeIds.has(link.speditionId)) {
+            user = await lookupProfile(spedvId, activeIds);
+            if (user === undefined) continue; // API-Problem: nichts ändern
+        }
 
         if (!user) {
             // Beendete Partnerschaften sind in Schritt 2 erledigt
@@ -410,7 +431,6 @@ async function runSync(guild) {
 
     if (linksChanged) saveLinks(links);
     setGuildSettings(guild.id, { etsPartnerRoles: registry });
-
     return summary;
 }
 
@@ -426,7 +446,6 @@ async function syncPartners(client) {
 
 function startPartnerSync(client) {
     const minutes = Number(process.env.PARTNER_SYNC_MINUTES) || 15;
-
     const run = () =>
         syncPartners(client)
             .then(summary => {

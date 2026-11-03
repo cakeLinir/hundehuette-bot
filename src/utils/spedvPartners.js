@@ -43,7 +43,6 @@ function toList(result) {
 /**
  * Liefert alle Partnerspeditionen mit angenommener Partnerschaft.
  * Doppelte Einträge (eingehend/ausgehend) werden nach Speditions-ID zusammengefasst.
- * @returns {Promise<Array<{id: string, shortName: string|null, name: string|null}>>}
  */
 async function fetchAcceptedPartners() {
     const ownId = requireOwnSpeditionId();
@@ -65,7 +64,6 @@ async function fetchAcceptedPartners() {
     }
 
     const partners = new Map();
-
     for (const entry of entries) {
         if (get(entry, 'accepted') !== true) continue;
 
@@ -90,6 +88,7 @@ async function fetchAcceptedPartners() {
 
 /**
  * Liefert aktive Fahrer der übergebenen Partnerspeditionen (alte REST-API, includePartnerships).
+ * Hinweis: SpedV liefert hier nicht für jede Partnerspedition alle Fahrer.
  * @param {Iterable<string>} partnerIds
  */
 async function fetchPartnerUsers(partnerIds) {
@@ -128,4 +127,43 @@ async function fetchPartnerUsers(partnerIds) {
         );
 }
 
-module.exports = { fetchAcceptedPartners, fetchPartnerUsers };
+/**
+ * Lädt ein einzelnes Profil per ID (funktioniert auch für Fahrer von Partnerspeditionen,
+ * die getusers nicht liefert).
+ * @returns {Promise<{id:string,userName:string,inSped:*,aboutMe:string,spedition:{id:string}}|null>}
+ *   null = Profil nicht gefunden/ungültig. Wirft bei API-Problemen.
+ */
+async function fetchPartnerProfile(userId) {
+    const id = String(userId ?? '').trim();
+    if (!/^\d+$/.test(id)) throw new Error('Ungültige SpedV-Nutzer-ID.');
+
+    let result;
+    try {
+        const { data } = await axios.get(`${baseUrl()}/rest/api`, {
+            params: { apikey: process.env.SPEDV_API_KEY, function: 'getuserprofile', id },
+            timeout: TIMEOUT_MS,
+        });
+        if (!data || typeof data !== 'object' || data.error) {
+            throw new Error(`API meldet Fehler: ${data?.msg ?? 'unbekannt'}`);
+        }
+        result = data.result;
+    } catch (error) {
+        throw new Error(`SpedV-Profil nicht abrufbar (${describe(error)})`);
+    }
+
+    if (!result || typeof result !== 'object') return null;
+
+    const profileId = String(get(result, 'id') ?? '');
+    const userName = cleanText(get(result, 'userName'));
+    if (profileId !== id || !userName) return null;
+
+    return {
+        id,
+        userName,
+        inSped: get(result, 'inSped'),
+        aboutMe: String(get(result, 'aboutMe') ?? ''),
+        spedition: { id: String(get(get(result, 'spedition'), 'id') ?? '') },
+    };
+}
+
+module.exports = { fetchAcceptedPartners, fetchPartnerUsers, fetchPartnerProfile };

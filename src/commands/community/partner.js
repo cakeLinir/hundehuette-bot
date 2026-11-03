@@ -9,7 +9,11 @@ const { createEmbed, createErrorEmbed } = require('../../utils/embedBuilder');
 const { isModuleEnabled } = require('../../utils/moduleManager');
 const logger = require('../../utils/logger');
 const { fetchAboutMe, getSpedvNamesByDiscordId } = require('../../utils/spedvApi');
-const { fetchAcceptedPartners, fetchPartnerUsers } = require('../../utils/spedvPartners');
+const {
+    fetchAcceptedPartners,
+    fetchPartnerUsers,
+    fetchPartnerProfile,
+} = require('../../utils/spedvPartners');
 const {
     getPending,
     createPending,
@@ -49,13 +53,61 @@ async function grantAndReply(interaction, partner, driver) {
         });
     } catch (error) {
         if (error instanceof PartnerLinkError) return fail(interaction, error.message);
-
         logger.error('Partner: Rolle konnte nicht vergeben werden', error);
         return fail(
             interaction,
             'Deine Verknüpfung ist gespeichert, aber ich konnte die Rolle nicht vergeben. Das Team muss meine Bot-Rolle über die Partnerrollen schieben. Der automatische Abgleich versucht es später erneut.'
         );
     }
+}
+
+/** Sucht den Fahrer erst in der Fahrerliste, sonst über die angegebene SpedV-ID. */
+async function resolveDriver(interaction, givenName, partners, users) {
+    const listed = users.find(user => norm(user.userName) === norm(givenName));
+    if (listed) return { driver: listed };
+
+    const givenId = interaction.options.getString('spedv-id')?.trim();
+
+    if (!givenId) {
+        const visible = new Set(users.map(u => u.spedition.id));
+        const silent = partners.filter(p => !visible.has(p.id));
+        if (silent.length) {
+            logger.warn(
+                `Partner: Keine Fahrer abrufbar für: ${silent.map(p => `${p.shortName ?? p.name} (${p.id})`).join(', ')}`
+            );
+        }
+        return {
+            error:
+                'Ich finde diesen Namen bei keiner unserer Partnerspeditionen. Prüfe die Schreibweise.\n' +
+                (silent.length
+                    ? `Von ${silent.map(p => p.shortName ?? p.name ?? p.id).join(', ')} kann SpedV aktuell keine Fahrerliste liefern. ` +
+                    'Gib in diesem Fall zusätzlich deine **SpedV-ID** bei `spedv-id` an.'
+                    : 'Ist deine Spedition erst kürzlich Partner geworden, versuche es in ein paar Minuten erneut.'),
+        };
+    }
+
+    if (!/^\d{1,12}$/.test(givenId)) {
+        return { error: 'Die SpedV-ID darf nur aus Ziffern bestehen.' };
+    }
+
+    let profile;
+    try {
+        profile = await fetchPartnerProfile(givenId);
+    } catch (error) {
+        logger.error('Partner: Profilabfrage fehlgeschlagen', error);
+        return { error: 'SpedV ist gerade nicht erreichbar. Versuch es später nochmal.' };
+    }
+
+    if (!profile || norm(profile.userName) !== norm(givenName)) {
+        return { error: 'Name und SpedV-ID passen nicht zusammen. Prüfe beides.' };
+    }
+    if (profile.inSped === false || !partners.some(p => p.id === profile.spedition.id)) {
+        return { error: 'Dieses Konto gehört zu keiner unserer Partnerspeditionen.' };
+    }
+
+    return {
+        driver: { id: profile.id, userName: profile.userName, spedition: profile.spedition },
+    };
 }
 
 async function handleLink(interaction) {
@@ -92,24 +144,9 @@ async function handleLink(interaction) {
         return fail(interaction, 'SpedV ist gerade nicht erreichbar. Versuch es später nochmal.');
     }
 
-    const driver = users.find(user => norm(user.userName) === norm(givenName));
-    if (!driver) {
-        const visible = new Set(users.map(u => u.spedition.id));
-        const silent = partners.filter(p => !visible.has(p.id));
-        if (silent.length) {
-            logger.warn(
-                `Partner: Keine Fahrer abrufbar für: ${silent.map(p => `${p.shortName ?? p.name} (${p.id})`).join(', ')}`
-            );
-        }
-        return fail(
-            interaction,
-            'Ich finde diesen Namen bei keiner unserer Partnerspeditionen. Prüfe die Schreibweise.\n' +
-            (silent.length
-                ? `Von ${silent.map(p => p.shortName ?? p.name ?? p.id).join(', ')} sind aktuell keine Fahrer abrufbar. ` +
-                'Die Geschäftsführung muss die Partnerschaft in SpedV in beide Richtungen bestätigen.'
-                : 'Ist deine Spedition erst kürzlich Partner geworden, versuche es in ein paar Minuten erneut.')
-        );
-    }
+    const resolved = await resolveDriver(interaction, givenName, partners, users);
+    if (resolved.error) return fail(interaction, resolved.error);
+    const { driver } = resolved;
 
     const partner = partners.find(p => p.id === driver.spedition.id);
     if (!partner) {
@@ -148,7 +185,8 @@ async function handleLink(interaction) {
                 'Damit niemand deinen Namen missbraucht, bestätige bitte dein SpedV-Profil:\n\n' +
                 `1. Trage diesen Code in SpedV im Profil unter **Über mich** ein:\n**\`${created.code}\`**\n` +
                 '2. Speichere das Profil.\n' +
-                `3. Führe danach erneut **/partner link** mit dem Namen **${driver.userName}** aus.\n\n` +
+                `3. Führe danach erneut **/partner link** mit dem Namen **${driver.userName}**` +
+                `${interaction.options.getString('spedv-id') ? ' und derselben SpedV-ID' : ''} aus.\n\n` +
                 `Der Code ist ${TTL_MS / 60_000} Minuten gültig. Nach der Bestätigung kannst du ihn wieder löschen.`
             )],
         });
@@ -237,7 +275,9 @@ async function handleList(interaction) {
 
     const ended = Object.entries(registry)
         .filter(([id]) => !activeIds.has(id))
-        .map(([id, entry]) => `• ${entry.shortName ?? entry.name ?? id} (ID ${id}) → ${entry.state === 'ended' ? 'beendet' : 'wird geprüft'}`);
+        .map(([id, entry]) =>
+            `• ${entry.shortName ?? entry.name ?? id} (ID ${id}) → ${entry.state === 'ended' ? 'beendet' : 'wird geprüft'}`
+        );
 
     const text = [
         '**Aktive Partner**',
@@ -284,6 +324,12 @@ module.exports = {
                         .setName('spedv-name')
                         .setDescription('Dein exakter SpedV-Name')
                         .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option
+                        .setName('spedv-id')
+                        .setDescription('Deine SpedV-ID (nur nötig, wenn dein Name nicht gefunden wird)')
+                        .setRequired(false)
                 )
         )
         .addSubcommand(sub =>

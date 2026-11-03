@@ -1,113 +1,18 @@
 'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { DatabaseSync } = require('node:sqlite');
 const rules = require('./rules');
+const {
+    openDatabase,
+    StoreError,
+    plain,
+    plainAll,
+    requireText,
+    requireMonth,
+} = require('./db');
+const { createInvoiceApi } = require('./invoices');
 
-const DEFAULT_FILE = path.join(__dirname, '..', '..', 'data', 'billing.sqlite');
 const DECISION_KINDS = ['waive', 'dismiss', 'assess'];
 const STORED_OUTCOMES = ['fine', 'clear', 'review'];
-
-/** Fehler mit Text, der einer berechtigten Person direkt angezeigt werden darf. */
-class StoreError extends Error { }
-
-const MIGRATIONS = [
-    // Version 1
-    `
-  CREATE TABLE tasks (
-    task_id          TEXT PRIMARY KEY CHECK (task_id GLOB '[0-9]*'),
-    visible_id       TEXT,
-    spedv_user_id    TEXT,
-    spedv_name       TEXT,
-    task_state       INTEGER NOT NULL,
-    completed_at     TEXT,
-    billing_month    TEXT CHECK (billing_month IS NULL OR billing_month GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'),
-    outcome          TEXT NOT NULL CHECK (outcome IN ('fine', 'clear', 'review')),
-    reason           TEXT,
-    message          TEXT,
-    max_velocity_kmh REAL,
-    excess_kmh       INTEGER,
-    fine_eur         INTEGER NOT NULL DEFAULT 0 CHECK (fine_eur >= 0),
-    evidence_json    TEXT,
-    evaluated_at     TEXT NOT NULL,
-    updated_at       TEXT NOT NULL
-  );
-
-  CREATE INDEX idx_tasks_month_user ON tasks (billing_month, spedv_user_id);
-  CREATE INDEX idx_tasks_outcome ON tasks (outcome);
-
-  CREATE TABLE decisions (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id       TEXT NOT NULL REFERENCES tasks (task_id),
-    kind          TEXT NOT NULL CHECK (kind IN ('waive', 'dismiss', 'assess')),
-    speed_kmh     REAL,
-    excess_kmh    INTEGER,
-    fine_eur      INTEGER NOT NULL DEFAULT 0 CHECK (fine_eur >= 0),
-    reason        TEXT NOT NULL,
-    decided_by    TEXT NOT NULL,
-    decided_at    TEXT NOT NULL,
-    revoked_at    TEXT,
-    revoked_by    TEXT,
-    revoke_reason TEXT
-  );
-
-  -- Pro Auftrag höchstens eine aktive Entscheidung
-  CREATE UNIQUE INDEX idx_decisions_active ON decisions (task_id) WHERE revoked_at IS NULL;
-
-  CREATE TABLE audit (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    at           TEXT NOT NULL,
-    actor        TEXT NOT NULL,
-    action       TEXT NOT NULL,
-    subject      TEXT,
-    details_json TEXT
-  );
-
-  -- Wirksames Ergebnis: eine aktive Entscheidung geht der automatischen Auswertung vor
-  CREATE VIEW task_effective AS
-  SELECT
-    t.*,
-    d.id         AS decision_id,
-    d.kind       AS decision_kind,
-    d.reason     AS decision_reason,
-    d.decided_by AS decision_by,
-    d.decided_at AS decision_at,
-    CASE
-      WHEN d.kind = 'assess'  THEN 'fine'
-      WHEN d.kind = 'waive'   THEN 'waived'
-      WHEN d.kind = 'dismiss' THEN 'dismissed'
-      WHEN t.outcome = 'review' THEN 'open_review'
-      ELSE t.outcome
-    END AS effective_status,
-    CASE
-      WHEN d.kind = 'assess' THEN d.fine_eur
-      WHEN d.kind IS NOT NULL THEN 0
-      WHEN t.outcome = 'fine' THEN t.fine_eur
-      ELSE 0
-    END AS effective_fine_eur
-  FROM tasks t
-  LEFT JOIN decisions d ON d.task_id = t.task_id AND d.revoked_at IS NULL;
-  `,
-];
-
-const plain = row => (row ? { ...row } : null);
-const plainAll = rows => rows.map(row => ({ ...row }));
-
-function requireText(value, label, min, max) {
-    const text = String(value ?? '').trim();
-    if (text.length < min || text.length > max) {
-        throw new StoreError(`${label} fehlt oder hat eine ungültige Länge (${min} bis ${max} Zeichen).`);
-    }
-    return text;
-}
-
-function requireMonth(month) {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(month ?? ''))) {
-        throw new StoreError('Monat muss im Format YYYY-MM angegeben werden.');
-    }
-    return month;
-}
 
 function validateResult(result) {
     if (!result || typeof result !== 'object') {
@@ -159,30 +64,8 @@ function toValues(result) {
     };
 }
 
-function migrate(db) {
-    const current = db.prepare('PRAGMA user_version').get().user_version;
-
-    if (current > MIGRATIONS.length) {
-        throw new StoreError(
-            `Die Datenbank hat Version ${current}, dieser Code kennt nur bis ${MIGRATIONS.length}.`
-        );
-    }
-
-    for (let version = current; version < MIGRATIONS.length; version += 1) {
-        db.exec('BEGIN IMMEDIATE');
-        try {
-            db.exec(MIGRATIONS[version]);
-            db.exec(`PRAGMA user_version = ${version + 1}`);
-            db.exec('COMMIT');
-        } catch (error) {
-            db.exec('ROLLBACK');
-            throw error;
-        }
-    }
-}
-
-function prepareStatements(db) {
-    return {
+function createTaskApi({ db, transaction, writeAudit }) {
+    const st = {
         getTask: db.prepare('SELECT * FROM tasks WHERE task_id = ?'),
         insertTask: db.prepare(`
       INSERT INTO tasks (
@@ -196,6 +79,9 @@ function prepareStatements(db) {
         billing_month = ?, outcome = ?, reason = ?, message = ?, max_velocity_kmh = ?,
         excess_kmh = ?, fine_eur = ?, evidence_json = ?, updated_at = ?
       WHERE task_id = ?`),
+        reopenTask: db.prepare(`
+      UPDATE tasks SET outcome = 'review', reason = ?, message = ?, fine_eur = 0, updated_at = ?
+      WHERE task_id = ?`),
         getEffective: db.prepare('SELECT * FROM task_effective WHERE task_id = ?'),
         getActiveDecision: db.prepare('SELECT * FROM decisions WHERE task_id = ? AND revoked_at IS NULL'),
         insertDecision: db.prepare(`
@@ -203,8 +89,6 @@ function prepareStatements(db) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
         revokeDecision: db.prepare(`
       UPDATE decisions SET revoked_at = ?, revoked_by = ?, revoke_reason = ? WHERE id = ?`),
-        insertAudit: db.prepare(`
-      INSERT INTO audit (at, actor, action, subject, details_json) VALUES (?, ?, ?, ?, ?)`),
         finalIds: db.prepare(`SELECT task_id FROM tasks WHERE outcome IN ('fine', 'clear')`),
         openReviews: db.prepare(`
       SELECT * FROM task_effective
@@ -236,59 +120,6 @@ function prepareStatements(db) {
       ORDER BY completed_at, task_id`),
         audit: db.prepare('SELECT * FROM audit ORDER BY id DESC LIMIT ?'),
     };
-}
-
-function openStore(options = {}) {
-    const file = options.file ?? process.env.HKC_BILLING_DB ?? DEFAULT_FILE;
-    const inMemory = file === ':memory:';
-
-    if (!inMemory) {
-        fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
-    }
-
-    const db = new DatabaseSync(file);
-    let st;
-
-    try {
-        db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
-        if (!inMemory) db.exec('PRAGMA journal_mode = WAL;');
-        migrate(db);
-        st = prepareStatements(db);
-    } catch (error) {
-        // Datei freigeben: sonst bleibt sie (vor allem unter Windows) gesperrt
-        try {
-            db.close();
-        } catch {
-            // Ursprünglichen Fehler beibehalten
-        }
-        throw error;
-    }
-
-    function transaction(fn) {
-        db.exec('BEGIN IMMEDIATE');
-        try {
-            const result = fn();
-            db.exec('COMMIT');
-            return result;
-        } catch (error) {
-            try {
-                db.exec('ROLLBACK');
-            } catch {
-                // Ursprünglichen Fehler beibehalten
-            }
-            throw error;
-        }
-    }
-
-    function writeAudit(actor, action, subject, details) {
-        st.insertAudit.run(
-            new Date().toISOString(),
-            String(actor),
-            action,
-            subject ?? null,
-            details ? JSON.stringify(details) : null
-        );
-    }
 
     /**
      * Speichert das Ergebnis einer Auswertung.
@@ -344,6 +175,32 @@ function openStore(options = {}) {
                 { outcome: v.outcome, reason: v.reason, fineEur: v.fineEur }
             );
             return { action: 'updated', outcome: v.outcome };
+        });
+    }
+
+    /**
+     * Macht aus einem endgültigen Ergebnis wieder einen Prüffall, zum Beispiel wenn sich
+     * der SpedV-Status nach der Auswertung geändert hat. Nicht möglich, solange der
+     * Auftrag in einer aktiven Rechnung steckt (die Datenbank verhindert es).
+     */
+    function reopenTask({ taskId, reason, message, actor }) {
+        const id = String(taskId ?? '').trim();
+        const why = requireText(reason, 'Der Grund', 1, 100);
+        const text = requireText(message, 'Die Meldung', 3, 500);
+        const who = requireText(actor, 'Die ausführende Person', 1, 64);
+
+        return transaction(() => {
+            const task = st.getTask.get(id);
+            if (!task) throw new StoreError('Auftrag nicht gefunden.');
+            if (task.outcome === 'review') return { action: 'unchanged' };
+
+            st.reopenTask.run(why, text, new Date().toISOString(), id);
+            writeAudit(who, 'task_reopened', id, {
+                reason: why,
+                previousOutcome: task.outcome,
+                previousFineEur: task.fine_eur,
+            });
+            return { action: 'reopened' };
         });
     }
 
@@ -445,12 +302,9 @@ function openStore(options = {}) {
         return plainAll(st.audit.all(Math.min(Math.max(Number(limit) || 100, 1), 1000)));
     }
 
-    function close() {
-        db.close();
-    }
-
     return {
         recordEvaluation,
+        reopenTask,
         getEffective,
         knownFinalTaskIds,
         listOpenReviews,
@@ -460,8 +314,22 @@ function openStore(options = {}) {
         decide,
         revokeDecision,
         auditLog,
-        close,
     };
+}
+
+function openStore(options = {}) {
+    const context = openDatabase(options);
+
+    try {
+        return {
+            ...createTaskApi(context),
+            ...createInvoiceApi(context),
+            close: context.close,
+        };
+    } catch (error) {
+        context.close();
+        throw error;
+    }
 }
 
 module.exports = { openStore, StoreError };

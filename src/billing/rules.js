@@ -16,6 +16,9 @@ module.exports = Object.freeze({
 
     timeZone: 'Europe/Berlin',
 
+    // Zahlungsfrist in Tagen, gerechnet ab dem ersten Versandversuch
+    paymentDays: 14,
+
     // SpedV ETSTaskState: 2 = Settled, 4 = AdminCheck
     billableStates: Object.freeze([2, 4]),
 

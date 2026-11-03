@@ -1,6 +1,12 @@
 'use strict';
 
 const rules = require('./rules');
+const {
+    parseTimestamp,
+    berlinDate,
+    berlinMonth,
+    formatVisibleId,
+} = require('./time');
 
 const OUTCOMES = Object.freeze({
     FINE: 'fine',
@@ -24,39 +30,6 @@ const REASONS = Object.freeze({
     MISSING_SPEED_SUMMARY: 'missing_speed_summary',
     SPEED_CONFLICT: 'speed_conflict',
 });
-
-// Zeitzonenangabe ist Pflicht: sonst hinge der Abrechnungsmonat von der Serverzeit ab.
-const OFFSET_PATTERN = /(Z|[+-]\d{2}:?\d{2})$/i;
-
-/** Strenger Parser für Zeitpunkte, die den Abrechnungsmonat bestimmen. */
-function parseTimestamp(value) {
-    if (typeof value !== 'string' || !OFFSET_PATTERN.test(value.trim())) return null;
-    const date = new Date(value);
-    return Number.isFinite(date.getTime()) ? date : null;
-}
-
-function berlinDate(date) {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: rules.timeZone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-    }).formatToParts(date);
-
-    const pick = type => parts.find(part => part.type === type)?.value;
-    return `${pick('year')}-${pick('month')}-${pick('day')}`;
-}
-
-function berlinMonth(date) {
-    return berlinDate(date).slice(0, 7);
-}
-
-/** 12657450 -> "#12'657'450" (so sehen die Fahrer die Nummer in SpedV). */
-function formatVisibleId(id) {
-    const digits = String(id ?? '').trim();
-    if (!/^\d+$/.test(digits)) return null;
-    return `#${digits.replace(/\B(?=(\d{3})+(?!\d))/g, "'")}`;
-}
 
 function isBillableState(state) {
     return rules.billableStates.includes(Number(state));

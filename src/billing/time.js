@@ -1,47 +1,56 @@
 'use strict';
 
-const { TIME_ZONE, DEFAULT_LOOKBACK_DAYS } = require('./constants');
+const rules = require('./rules');
 
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
+// Zeitzonenangabe ist Pflicht: sonst hinge der Abrechnungsmonat von der Serverzeit ab.
+const OFFSET_PATTERN = /(Z|[+-]\d{2}:?\d{2})$/i;
+
 function assertMonth(month) {
-    if (!MONTH_PATTERN.test(String(month))) {
+    if (!MONTH_PATTERN.test(String(month ?? ''))) {
         throw new TypeError('Abrechnungsmonat muss im Format YYYY-MM angegeben werden.');
     }
     return String(month);
 }
 
-function isValidDate(value) {
-    if (value === null || value === undefined || value === '') return false;
-    return Number.isFinite(new Date(value).getTime());
+/** Strenger Parser für Zeitpunkte, die den Abrechnungsmonat bestimmen. */
+function parseTimestamp(value) {
+    if (typeof value !== 'string' || !OFFSET_PATTERN.test(value.trim())) return null;
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date : null;
+}
+
+/** Kalendertag (YYYY-MM-DD) eines Zeitpunkts in Berliner Zeit. */
+function berlinDate(date) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: rules.timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(date);
+
+    const pick = type => parts.find(part => part.type === type)?.value;
+    return `${pick('year')}-${pick('month')}-${pick('day')}`;
 }
 
 /** Kalendermonat (YYYY-MM) eines Zeitpunkts in Berliner Zeit. */
-function monthInBerlin(value) {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: TIME_ZONE,
-        year: 'numeric',
-        month: '2-digit',
-    }).formatToParts(new Date(value));
-
-    const year = parts.find(part => part.type === 'year')?.value;
-    const month = parts.find(part => part.type === 'month')?.value;
-
-    return `${year}-${month}`;
+function berlinMonth(date) {
+    return berlinDate(date).slice(0, 7);
 }
 
 /** Ein Monat ist abgeschlossen, sobald in Berlin ein späterer Monat begonnen hat. */
 function isMonthClosed(month, now = new Date()) {
     assertMonth(month);
-    return monthInBerlin(now) > month;
+    return berlinMonth(now) > month;
 }
 
 /**
  * Grobes Startzeit-Fenster für die Vorauswahl. Aufträge außerhalb können nicht
- * im Monat enden. Die exakte Zuordnung erfolgt über die Endzeit. Der Rand von
- * 3 Stunden deckt den Berliner UTC-Offset ab.
+ * im Monat enden. Die exakte Zuordnung erfolgt über die Endzeit.
+ * Der Rand von 3 Stunden deckt den Berliner UTC-Offset ab.
  */
-function monthWindowMs(month, lookbackDays = DEFAULT_LOOKBACK_DAYS) {
+function monthWindowMs(month, lookbackDays = rules.defaultLookbackDays) {
     assertMonth(month);
     const [year, monthNumber] = month.split('-').map(Number);
     const marginMs = 3 * 3_600_000;
@@ -53,7 +62,7 @@ function monthWindowMs(month, lookbackDays = DEFAULT_LOOKBACK_DAYS) {
 }
 
 /** Ohne gültige Startzeit wird nicht vorab aussortiert. */
-function taskStartedInWindow(task, month, lookbackDays = DEFAULT_LOOKBACK_DAYS) {
+function taskStartedInWindow(task, month, lookbackDays = rules.defaultLookbackDays) {
     const startedMs = new Date(task?.startTime).getTime();
     if (!Number.isFinite(startedMs)) return true;
 
@@ -62,16 +71,19 @@ function taskStartedInWindow(task, month, lookbackDays = DEFAULT_LOOKBACK_DAYS) 
 }
 
 /** Zeigt die Nummer so, wie SpedV sie anzeigt: 12657450 -> #12'657'450 */
-function formatVisibleTaskId(id) {
-    return `#${String(id).replace(/\B(?=(\d{3})+(?!\d))/g, "'")}`;
+function formatVisibleId(id) {
+    const digits = String(id ?? '').trim();
+    if (!/^\d+$/.test(digits)) return null;
+    return `#${digits.replace(/\B(?=(\d{3})+(?!\d))/g, "'")}`;
 }
 
 module.exports = {
     assertMonth,
-    isValidDate,
-    monthInBerlin,
+    parseTimestamp,
+    berlinDate,
+    berlinMonth,
     isMonthClosed,
     monthWindowMs,
     taskStartedInWindow,
-    formatVisibleTaskId,
+    formatVisibleId,
 };

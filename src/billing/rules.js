@@ -19,6 +19,12 @@ module.exports = Object.freeze({
     // SpedV ETSTaskState: 2 = Settled, 4 = AdminCheck
     billableStates: Object.freeze([2, 4]),
 
+    // 1 = Done, 5 = Paused: noch nicht abrechenbar, im Monatsbericht als "offen" ausweisen
+    openStates: Object.freeze([1, 5]),
+
+    // Wie viele Tage vor Monatsbeginn gestartete Aufträge noch geprüft werden
+    defaultLookbackDays: 7,
+
     // Namen laut SpedV-DLL (nur für Berichte und Meldungen)
     stateNames: Object.freeze({
         '-1': 'NotAvaliable',

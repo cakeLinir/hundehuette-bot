@@ -1,14 +1,12 @@
 'use strict';
 
 const logger = require('../utils/logger');
-const { loadBillingConfig } = require('./config');
-const { openStore } = require('./store');
-const { createSpedvClient } = require('./spedvClient');
 const { berlinClock } = require('./time');
 const { runDailyBilling, runReminders, fetchReportChannel } = require('./job');
 const { buildAlertMessage, buildFailureMessage } = require('./report');
 const { createSettingsState } = require('./publisher');
 const { PING_KEYS, roleIds } = require('./permissions');
+const { getBillingContext } = require('./context');
 
 const RUN_HOUR = 6; // Berliner Zeit
 const DAILY_TICK_MS = 5 * 60_000;
@@ -50,15 +48,7 @@ function createBillingRuntime({
         }
     }
 
-    async function dailyTick() {
-        const at = now();
-        const guild = getGuild();
-        if (!guild || !isEnabled(guild)) return { skipped: 'inaktiv' };
-
-        const state = getState(guild);
-        if (!shouldRunDaily({ now: at, lastRunDate: state.get('lastRunDate'), runHour })) {
-            return { skipped: 'nicht fällig' };
-        }
+    async function executeDaily(guild, state, at) {
         if (dailyRunning) return { skipped: 'läuft bereits' };
 
         dailyRunning = true;
@@ -85,6 +75,28 @@ function createBillingRuntime({
         } finally {
             dailyRunning = false;
         }
+    }
+
+    async function dailyTick() {
+        const at = now();
+        const guild = getGuild();
+        if (!guild || !isEnabled(guild)) return { skipped: 'inaktiv' };
+
+        const state = getState(guild);
+        if (!shouldRunDaily({ now: at, lastRunDate: state.get('lastRunDate'), runHour })) {
+            return { skipped: 'nicht fällig' };
+        }
+
+        return executeDaily(guild, state, at);
+    }
+
+    /** Tageslauf sofort, unabhängig von Uhrzeit und letztem Lauf (für /abrechnung lauf). */
+    async function runNow() {
+        const at = now();
+        const guild = getGuild();
+        if (!guild || !isEnabled(guild)) return { skipped: 'inaktiv' };
+
+        return executeDaily(guild, getState(guild), at);
     }
 
     async function reminderTick() {
@@ -116,40 +128,31 @@ function createBillingRuntime({
         }
     }
 
-    return { dailyTick, reminderTick };
+    return { dailyTick, reminderTick, runNow };
 }
 
 /** Startet die Abrechnung im Bot. Nur mit BILLING_ENABLED=true und vollständiger Konfiguration. */
 function startBillingSchedule(client) {
-    if (process.env.BILLING_ENABLED !== 'true') {
-        logger.info('Abrechnung: ausgeschaltet (BILLING_ENABLED ist nicht "true")');
+    const context = getBillingContext();
+
+    if (!context.enabled) {
+        const log = process.env.BILLING_ENABLED === 'true' ? logger.warn : logger.info;
+        log(`Abrechnung: nicht gestartet (${context.reason})`);
         return null;
     }
 
-    const config = loadBillingConfig();
-    if (config.problems.length > 0) {
-        logger.warn(`Abrechnung: nicht gestartet (${config.problems.join('; ')})`);
-        return null;
-    }
-    for (const name of ['SPEDV_API_KEY', 'SPEDV_SPEDITION_ID', 'GUILD_ID']) {
-        if (!process.env[name]) {
-            logger.warn(`Abrechnung: nicht gestartet (${name} fehlt in der .env)`);
-            return null;
-        }
-    }
-
-    const store = openStore();
     const runtime = createBillingRuntime({
         getGuild: () => client.guilds.cache.get(process.env.GUILD_ID) ?? null,
-        store,
-        spedvClient: createSpedvClient(),
-        config,
-        speditionId: process.env.SPEDV_SPEDITION_ID,
+        store: context.store,
+        spedvClient: context.spedvClient,
+        config: context.config,
+        speditionId: context.speditionId,
         findLink: id => require('../utils/spedvApi').getLinkRecordBySpedvUserId(id),
         getState: guild => createSettingsState(guild.id),
         getPingRoleIds: guild => roleIds(guild.id, PING_KEYS),
         isEnabled: guild => require('../utils/moduleManager').isModuleEnabled(guild.id, 'ets'),
     });
+    context.runtime = runtime;
 
     const safe = (task, name) => () =>
         task().catch(error => logger.error(`Abrechnung: ${name} abgebrochen`, error));
@@ -159,7 +162,7 @@ function startBillingSchedule(client) {
     setInterval(safe(runtime.reminderTick, 'Erinnerungslauf'), REMINDER_TICK_MS);
 
     logger.info(`Abrechnung: Zeitplan aktiv (Lauf ab ${RUN_HOUR}:00 Berliner Zeit, Erinnerungen alle 10 Minuten)`);
-    return { store, runtime };
+    return runtime;
 }
 
 module.exports = { shouldRunDaily, createBillingRuntime, startBillingSchedule };

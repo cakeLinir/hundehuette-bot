@@ -1,4 +1,3 @@
-
 const fs = require('fs');
 const path = require('path');
 const writeFileAtomic = require('write-file-atomic');
@@ -7,10 +6,13 @@ const RANKS = require('../config/ranks');
 const { createEmbed } = require('./embedBuilder');
 const { fetchStats } = require('./spedvApi');
 const { getRankRoleId } = require('./rankRoles');
+const { findDiscordIdForDriver } = require('./linkLookup');
 
 const dataDir = path.join(__dirname, '..', '..', 'data');
 const statePath = path.join(dataDir, 'etsRanks.json');
-const linksPath = path.join(dataDir, 'etsLinks.json');
+const linksPath = path.resolve(
+    process.env.ETS_LINKS_PATH || path.join(dataDir, 'etsLinks.json')
+);
 
 if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -84,7 +86,6 @@ function canonicalRankName(rankName) {
 
 function allRankIndex(rankName) {
     const canonical = canonicalRankName(rankName);
-
     if (!canonical) return -1;
 
     return ALL_RANKS_HIGH_TO_LOW.findIndex(
@@ -150,20 +151,6 @@ function readLinks() {
 }
 
 /**
- * Sucht die Discord-ID ohne Beachtung der Groß-/Kleinschreibung
- * des SpedV-Benutzernamens.
- */
-function getDiscordId(links, userName) {
-    const wanted = norm(userName);
-
-    const entry = Object.entries(links).find(
-        ([name]) => norm(name) === wanted
-    );
-
-    return entry?.[1] ? String(entry[1]) : null;
-}
-
-/**
  * Unterstützt deutsche Datumsangaben wie
  * "11.10.2026 18:13:11" sowie ISO-Datumsangaben.
  */
@@ -171,7 +158,6 @@ function parseDate(value) {
     if (!value) return null;
 
     const input = String(value);
-
     const match = input.match(
         /^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}):(\d{2}))?$/
     );
@@ -219,9 +205,7 @@ const daysSince = date =>
  * Erstellt eine Ankündigung für einen Fahrer-Rangaufstieg.
  */
 function buildPromotion(driver, fromRank, toRank, discordId) {
-    const who = discordId
-        ? `<@${discordId}>`
-        : `**${driver.userName}**`;
+    const who = discordId ? `<@${discordId}>` : `**${driver.userName}**`;
 
     return createEmbed(
         'success',
@@ -236,9 +220,7 @@ function buildPromotion(driver, fromRank, toRank, discordId) {
  * Erstellt eine Ankündigung für eine Degradierung.
  */
 function buildDemotion(driver, fromRank, toRank, discordId) {
-    const who = discordId
-        ? `<@${discordId}>`
-        : `**${driver.userName}**`;
+    const who = discordId ? `<@${discordId}>` : `**${driver.userName}**`;
 
     return createEmbed(
         'error',
@@ -256,10 +238,7 @@ function buildDemotion(driver, fromRank, toRank, discordId) {
  * Das ist keine automatische Fahrerbeförderung.
  */
 function buildFunctionChange(driver, fromRank, toRank, discordId) {
-    const who = discordId
-        ? `<@${discordId}>`
-        : `**${driver.userName}**`;
-
+    const who = discordId ? `<@${discordId}>` : `**${driver.userName}**`;
     const oldRank = canonicalRankName(fromRank) ?? fromRank;
     const newRank = canonicalRankName(toRank) ?? toRank;
 
@@ -281,9 +260,7 @@ function buildFunctionChange(driver, fromRank, toRank, discordId) {
  * oder Degradierung fehlinterpretiert.
  */
 function buildUnknownRankChange(driver, fromRank, toRank, discordId) {
-    const who = discordId
-        ? `<@${discordId}>`
-        : `**${driver.userName}**`;
+    const who = discordId ? `<@${discordId}>` : `**${driver.userName}**`;
 
     return createEmbed(
         'info',
@@ -302,7 +279,8 @@ function buildUnknownRankChange(driver, fromRank, toRank, discordId) {
  * Erwähnt ausschließlich den verknüpften Discord-Benutzer.
  */
 async function announceRankChange(channel, driver, previousRank, newRank, links) {
-    const discordId = getDiscordId(links, driver.userName);
+    // Nur eine gültige Discord-ID wird gepingt, sonst erscheint der SpedV-Name
+    const discordId = findDiscordIdForDriver(links, driver);
 
     const previousIsDriver = isDriverRank(previousRank);
     const newIsDriver = isDriverRank(newRank);
@@ -314,19 +292,9 @@ async function announceRankChange(channel, driver, previousRank, newRank, links)
         const toIndex = driverRankIndex(newRank);
 
         if (toIndex > fromIndex) {
-            embed = buildPromotion(
-                driver,
-                previousRank,
-                newRank,
-                discordId
-            );
+            embed = buildPromotion(driver, previousRank, newRank, discordId);
         } else if (toIndex < fromIndex) {
-            embed = buildDemotion(
-                driver,
-                previousRank,
-                newRank,
-                discordId
-            );
+            embed = buildDemotion(driver, previousRank, newRank, discordId);
         } else {
             return;
         }
@@ -336,19 +304,9 @@ async function announceRankChange(channel, driver, previousRank, newRank, links)
     ) {
         // Sobald ein Funktionsrang beteiligt ist, wird die Änderung
         // als Funktionswechsel/neue Betrauung kommuniziert.
-        embed = buildFunctionChange(
-            driver,
-            previousRank,
-            newRank,
-            discordId
-        );
+        embed = buildFunctionChange(driver, previousRank, newRank, discordId);
     } else {
-        embed = buildUnknownRankChange(
-            driver,
-            previousRank,
-            newRank,
-            discordId
-        );
+        embed = buildUnknownRankChange(driver, previousRank, newRank, discordId);
     }
 
     await channel.send({
@@ -368,7 +326,6 @@ async function announceRankChange(channel, driver, previousRank, newRank, links)
  */
 async function proposeCandidates(guild, active, next) {
     const channelId = process.env.ETS_LEADER_CHANNEL_ID;
-
     if (!channelId) return;
 
     const channel = await guild.channels.fetch(channelId).catch(() => null);
@@ -391,7 +348,6 @@ async function proposeCandidates(guild, active, next) {
         if (next.proposed[id]) continue;
 
         const index = driverRankIndex(driver.rank?.name);
-
         if (index === -1) continue;
 
         const current = DRIVER_RANKS[index];
@@ -410,7 +366,6 @@ async function proposeCandidates(guild, active, next) {
         }
 
         const days = daysSince(joined);
-
         if (days < criteria.minDays) continue;
 
         let km;
@@ -495,7 +450,6 @@ async function checkPromotions(guild, users) {
                 'Promotion: ETS_PROMOTION_CHANNEL_ID fehlt in der .env, ' +
                 'Beförderungsmodul ist aus'
             );
-
             warnedNoChannel = true;
         }
 
@@ -606,7 +560,6 @@ async function checkPromotions(guild, users) {
     }
 
     await proposeCandidates(guild, active, next);
-
     saveState(next);
 }
 

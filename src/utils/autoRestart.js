@@ -21,11 +21,11 @@ function scheduleAutoRestart(client) {
             await channel.send({ embeds: [embed] }).catch(() => { });
         }
 
-        // 2. Git Pull + npm install
+        // 2. Git Pull + exakte Installation laut Lockfile (verändert package-lock.json nie)
         try {
             console.log('[AutoRestart] Ziehe Updates...');
             execSync('git pull', { stdio: 'inherit' });
-            execSync('npm install --omit=dev', { stdio: 'inherit' });
+            execSync('npm ci --omit=dev', { stdio: 'inherit' });
             console.log('[AutoRestart] Updates fertig.');
         } catch (err) {
             console.error('[AutoRestart] Update fehlgeschlagen:', err.message);
@@ -34,7 +34,6 @@ function scheduleAutoRestart(client) {
         // 3. Neustart via PM2
         console.log('[AutoRestart] Starte neu...');
         process.exit(0);
-
     }, INTERVAL_MS);
 
     console.log('[AutoRestart] Neustart geplant in 24h.');

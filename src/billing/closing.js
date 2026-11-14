@@ -8,7 +8,6 @@ const { isBillableState, stateName, formatVisibleId } = require('./evaluate');
 const PENDING_STATES = Object.freeze([0, ...rules.openStates]);
 // 4 = AdminCheck: wird abgerechnet, der Status kann sich aber noch ändern
 const PROVISIONAL_STATES = Object.freeze([4]);
-
 const SEVERITY = { ok: 0, warn: 1, fail: 2 };
 
 function startMonthOf(task) {
@@ -18,14 +17,23 @@ function startMonthOf(task) {
 
 /**
  * Laufende Abrechnung eines Monats: je Fahrer die aktuellen Zahlen.
+ * Ein Fahrer kann mehrere aktive Rechnungen haben (Hauptrechnung und Nachträge).
+ * "invoice" ist die Hauptrechnung (sonst die erste), "invoices" enthält alle.
  * Verändert nichts und darf jederzeit aufgerufen werden.
  */
 function buildStatement({ store, month }) {
-    const activeInvoices = new Map(
-        store.listInvoices({ month })
-            .filter(invoice => invoice.status !== 'void')
-            .map(invoice => [invoice.spedv_user_id, invoice])
-    );
+    const invoicesByUser = new Map();
+    for (const invoice of store.listInvoices({ month })) {
+        if (invoice.status === 'void') continue;
+        const list = invoicesByUser.get(invoice.spedv_user_id) ?? [];
+        list.push({
+            number: invoice.number,
+            status: invoice.status,
+            totalEur: invoice.total_eur,
+            supplementNo: invoice.supplement_no,
+        });
+        invoicesByUser.set(invoice.spedv_user_id, list);
+    }
 
     const globalReviews = store.listOpenReviews({ month })
         .filter(review => review.billing_month === null)
@@ -37,8 +45,8 @@ function buildStatement({ store, month }) {
         }));
 
     const drivers = store.summarizeMonth(month).map(row => {
-        const invoice = row.spedv_user_id === null ? null : activeInvoices.get(row.spedv_user_id);
-
+        const invoices = row.spedv_user_id === null ? [] : (invoicesByUser.get(row.spedv_user_id) ?? []);
+        const main = invoices.find(invoice => invoice.supplementNo === 0) ?? invoices[0] ?? null;
         return {
             spedvUserId: row.spedv_user_id,
             spedvName: row.spedv_name ?? 'unbekannt',
@@ -49,9 +57,8 @@ function buildStatement({ store, month }) {
             waived: row.waived,
             dismissed: row.dismissed,
             openReviews: row.open_reviews,
-            invoice: invoice
-                ? { number: invoice.number, status: invoice.status, totalEur: invoice.total_eur }
-                : null,
+            invoice: main,
+            invoices,
         };
     });
 
@@ -65,20 +72,28 @@ function buildStatement({ store, month }) {
             fines: drivers.reduce((sum, driver) => sum + driver.fines, 0),
             fineEur: drivers.reduce((sum, driver) => sum + driver.fineEur, 0),
             openReviews: drivers.reduce((sum, driver) => sum + driver.openReviews, 0) + globalReviews.length,
-            invoicedEur: drivers.reduce((sum, driver) => sum + (driver.invoice?.totalEur ?? 0), 0),
+            invoicedEur: drivers.reduce(
+                (sum, driver) => sum + driver.invoices.reduce((inner, invoice) => inner + invoice.totalEur, 0),
+                0
+            ),
         },
     };
+}
+
+/** Die Rechnung, um die sich als Nächstes gekümmert wird: ein Entwurf, sonst die Hauptrechnung. */
+function primaryInvoice(driver) {
+    return driver.invoices.find(invoice => invoice.status === 'draft') ?? driver.invoice ?? null;
 }
 
 /**
  * Generalprüfung eines Monats. Verändert nichts.
  *
  * @param {object} options
- * @param {object} options.store         Speicher
- * @param {Array}  options.listedTasks   Aktuelle Auftragsliste aus SpedV (GET /v1/tasks)
- * @param {Iterable<string>} options.linkedUserIds SpedV-IDs der Fahrer mit verifizierter Discord-Verknüpfung
- * @param {string} options.month         YYYY-MM
- * @param {Date}   [options.now]
+ * @param {object} options.store Speicher
+ * @param {Array} options.listedTasks Aktuelle Auftragsliste aus SpedV (GET /v1/tasks)
+ * @param {Iterable} options.linkedUserIds SpedV-IDs der Fahrer mit verifizierter Discord-Verknüpfung
+ * @param {string} options.month YYYY-MM
+ * @param {Date} [options.now]
  */
 function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = new Date() }) {
     const billingStartMonth = rules.billingStartDate.slice(0, 7);
@@ -86,10 +101,7 @@ function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = 
     const byId = new Map(listedTasks.map(task => [String(task.id), task]));
     const statement = buildStatement({ store, month });
     const items = [];
-
-    const add = (id, label, status, detail, data = []) =>
-        items.push({ id, label, status, detail, data });
-
+    const add = (id, label, status, detail, data = []) => items.push({ id, label, status, detail, data });
     const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
     // 1. Monat abgeschlossen
@@ -104,12 +116,11 @@ function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = 
     // 2. Vollständigkeit: jeder in diesem Monat gestartete, abrechenbare Auftrag muss ausgewertet sein
     const notEvaluated = listedTasks
         .filter(task =>
-            isBillableState(task.state) &&
-            startMonthOf(task) === month &&
-            store.getEffective(String(task.id)) === null
+            isBillableState(task.state)
+            && startMonthOf(task) === month
+            && store.getEffective(String(task.id)) === null
         )
         .map(task => ({ taskId: String(task.id), visibleId: formatVisibleId(task.id), userId: String(task.userID ?? '') }));
-
     add(
         'not_evaluated',
         'Alle Aufträge ausgewertet',
@@ -133,7 +144,6 @@ function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = 
             userId: String(task.userID ?? ''),
             state: stateName(task.state),
         }));
-
     add(
         'pending_tasks',
         'Keine offenen Aufträge',
@@ -152,14 +162,11 @@ function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = 
             fineTasks.push({ fine, driver });
         }
     }
-
     const staleUsers = new Set();
     const stale = [];
     const provisional = [];
-
     for (const { fine, driver } of fineTasks) {
         const current = byId.get(fine.task_id);
-
         if (!current || !isBillableState(current.state)) {
             staleUsers.add(driver.spedvUserId);
             stale.push({
@@ -177,7 +184,6 @@ function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = 
             });
         }
     }
-
     add(
         'provisional_tasks',
         'Keine vorläufigen Strafaufträge',
@@ -187,7 +193,6 @@ function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = 
             : 'Alle Strafaufträge sind endgültig abgerechnet.',
         provisional
     );
-
     add(
         'state_changed',
         'Status der Strafaufträge unverändert',
@@ -208,12 +213,10 @@ function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = 
         message: review.message,
         global: review.billing_month === null,
     }));
-
     const blockedUsers = new Set(
         openReviews.filter(review => !review.global && review.spedvUserId).map(review => review.spedvUserId)
     );
     const hasGlobalReview = openReviews.some(review => review.global);
-
     add(
         'open_reviews',
         'Keine offenen Prüffälle',
@@ -228,7 +231,6 @@ function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = 
     const unlinked = statement.drivers
         .filter(driver => driver.fineEur > 0 && !linked.has(String(driver.spedvUserId)))
         .map(driver => ({ spedvUserId: driver.spedvUserId, spedvName: driver.spedvName, fineEur: driver.fineEur }));
-
     add(
         'unlinked_drivers',
         'Fahrer mit Strafe sind verknüpft',
@@ -240,29 +242,32 @@ function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = 
     );
     const unlinkedUsers = new Set(unlinked.map(driver => String(driver.spedvUserId)));
 
-    // 7. Rechnungen: Summen und Nachzügler
+    // 7. Rechnungen: Summen und Strafen, die noch in keiner Rechnung stehen
     const brokenInvoices = [];
     const lateFines = [];
-
     for (const driver of statement.drivers) {
-        if (!driver.invoice) continue;
-
-        const invoice = store.getInvoice(driver.invoice.number);
-        const lineSum = invoice.lines.reduce((sum, line) => sum + line.fine_eur, 0);
-
-        if (lineSum !== invoice.total_eur) {
-            brokenInvoices.push({
-                number: invoice.number,
-                totalEur: invoice.total_eur,
-                lineSumEur: lineSum,
-            });
+        if (driver.invoices.length === 0) continue;
+        const inInvoice = new Set();
+        for (const entry of driver.invoices) {
+            const invoice = store.getInvoice(entry.number);
+            const lineSum = invoice.lines
+                .filter(line => line.active === 1)
+                .reduce((sum, line) => sum + line.fine_eur, 0);
+            if (lineSum !== invoice.total_eur) {
+                brokenInvoices.push({
+                    number: invoice.number,
+                    totalEur: invoice.total_eur,
+                    lineSumEur: lineSum,
+                });
+            }
+            for (const line of invoice.lines) {
+                if (line.active === 1) inInvoice.add(line.task_id);
+            }
         }
-
-        const inInvoice = new Set(invoice.lines.map(line => line.task_id));
         for (const fine of store.listFines({ month, spedvUserId: driver.spedvUserId })) {
             if (!inInvoice.has(fine.task_id)) {
                 lateFines.push({
-                    number: invoice.number,
+                    number: driver.invoice.number,
                     taskId: fine.task_id,
                     visibleId: fine.visible_id,
                     spedvName: driver.spedvName,
@@ -270,7 +275,6 @@ function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = 
             }
         }
     }
-
     add(
         'invoice_totals',
         'Rechnungssummen stimmen',
@@ -280,22 +284,20 @@ function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = 
             : 'Alle Rechnungssummen stimmen mit den Zeilen überein.',
         brokenInvoices
     );
-
     add(
         'late_fines',
-        'Keine Nachzügler',
+        'Alle Strafen stehen in einer Rechnung',
         lateFines.length ? 'warn' : 'ok',
         lateFines.length
-            ? `${plural(lateFines.length, 'Strafauftrag kam', 'Strafaufträge kamen')} nach dem Rechnungsentwurf dazu.`
-            : 'Es gibt keine Nachzügler.',
+            ? `${plural(lateFines.length, 'Strafauftrag steht', 'Strafaufträge stehen')} in keiner Rechnung. Der nächste Lauf erstellt einen Nachtrag.`
+            : 'Alle Strafen stehen in einer Rechnung.',
         lateFines
     );
 
     // 8. Entwürfe
     const draftsMissing = statement.drivers
-        .filter(driver => driver.fineEur > 0 && !driver.invoice)
+        .filter(driver => driver.fineEur > 0 && driver.invoices.length === 0)
         .map(driver => ({ spedvUserId: driver.spedvUserId, spedvName: driver.spedvName, fineEur: driver.fineEur }));
-
     add(
         'drafts_missing',
         'Entwürfe vorhanden',
@@ -310,19 +312,23 @@ function runClosingCheck({ store, listedTasks, linkedUserIds = [], month, now = 
     const readyDrivers = closed && !hasGlobalReview
         ? statement.drivers
             .filter(driver =>
-                driver.fineEur > 0 &&
-                driver.spedvUserId !== null &&
-                !blockedUsers.has(driver.spedvUserId) &&
-                !unlinkedUsers.has(String(driver.spedvUserId)) &&
-                !staleUsers.has(driver.spedvUserId)
+                driver.fineEur > 0
+                && driver.spedvUserId !== null
+                && !blockedUsers.has(driver.spedvUserId)
+                && !unlinkedUsers.has(String(driver.spedvUserId))
+                && !staleUsers.has(driver.spedvUserId)
             )
-            .map(driver => ({
-                spedvUserId: driver.spedvUserId,
-                spedvName: driver.spedvName,
-                fineEur: driver.fineEur,
-                invoiceNumber: driver.invoice?.number ?? null,
-                invoiceStatus: driver.invoice?.status ?? null,
-            }))
+            .map(driver => {
+                const primary = primaryInvoice(driver);
+                return {
+                    spedvUserId: driver.spedvUserId,
+                    spedvName: driver.spedvName,
+                    fineEur: driver.fineEur,
+                    invoiceNumber: primary?.number ?? null,
+                    invoiceStatus: primary?.status ?? null,
+                    invoices: driver.invoices,
+                };
+            })
         : [];
 
     const status = items.reduce(

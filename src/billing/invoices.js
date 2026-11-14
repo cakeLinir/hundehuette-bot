@@ -3,10 +3,7 @@
 const rules = require('./rules');
 const { isMonthClosed } = require('./time');
 const {
-    StoreError,
-    plainAll,
-    requireText,
-    requireMonth,
+    StoreError, plainAll, requireText, requireMonth,
 } = require('./db');
 
 const DAY_MS = 86_400_000;
@@ -24,8 +21,18 @@ function parseDate(value, label) {
 function createInvoiceApi({ db, transaction, writeAudit }) {
     const st = {
         byNumber: db.prepare('SELECT * FROM invoices WHERE number = ?'),
-        findActive: db.prepare(
-            `SELECT * FROM invoices WHERE billing_month = ? AND spedv_user_id = ? AND status <> 'void'`
+        findMain: db.prepare(
+            `SELECT * FROM invoices
+       WHERE billing_month = ? AND spedv_user_id = ? AND supplement_no = 0 AND status <> 'void'`
+        ),
+        findDraftSupplement: db.prepare(
+            `SELECT * FROM invoices
+       WHERE billing_month = ? AND spedv_user_id = ? AND supplement_no > 0 AND status = 'draft'
+       ORDER BY supplement_no LIMIT 1`
+        ),
+        nextSupplementNo: db.prepare(
+            `SELECT COALESCE(MAX(supplement_no), 0) + 1 AS next
+       FROM invoices WHERE billing_month = ? AND spedv_user_id = ?`
         ),
         numberExists: db.prepare('SELECT 1 AS found FROM invoices WHERE number = ?'),
         lines: db.prepare('SELECT * FROM invoice_lines WHERE invoice_id = ? ORDER BY completed_at, task_id'),
@@ -35,14 +42,10 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
         AND (billing_month IS NULL OR (billing_month = ? AND spedv_user_id = ?))
       ORDER BY task_id`),
         openFines: db.prepare(`
-      SELECT
-        e.task_id,
-        e.visible_id,
-        e.completed_at,
-        e.spedv_name,
-        e.effective_fine_eur AS fine_eur,
-        CASE WHEN e.decision_kind = 'assess' THEN d.speed_kmh ELSE e.max_velocity_kmh END AS max_velocity_kmh,
-        CASE WHEN e.decision_kind = 'assess' THEN d.excess_kmh ELSE e.excess_kmh END AS excess_kmh
+      SELECT e.task_id, e.visible_id, e.completed_at, e.spedv_name,
+             e.effective_fine_eur AS fine_eur,
+             CASE WHEN e.decision_kind = 'assess' THEN d.speed_kmh ELSE e.max_velocity_kmh END AS max_velocity_kmh,
+             CASE WHEN e.decision_kind = 'assess' THEN d.excess_kmh ELSE e.excess_kmh END AS excess_kmh
       FROM task_effective e
       LEFT JOIN decisions d ON d.id = e.decision_id
       WHERE e.effective_status = 'fine'
@@ -59,15 +62,18 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
         AND NOT EXISTS (SELECT 1 FROM invoice_lines l WHERE l.task_id = e.task_id AND l.active = 1)
       ORDER BY e.spedv_user_id`),
         insertInvoice: db.prepare(`
-      INSERT INTO invoices (number, billing_month, spedv_user_id, spedv_name, total_eur, status, created_at, created_by)
-      VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)`),
+      INSERT INTO invoices (number, billing_month, spedv_user_id, spedv_name, total_eur,
+                            status, created_at, created_by, supplement_no)
+      VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)`),
         insertLine: db.prepare(`
-      INSERT INTO invoice_lines (invoice_id, task_id, visible_id, completed_at, max_velocity_kmh, excess_kmh, fine_eur)
+      INSERT INTO invoice_lines (invoice_id, task_id, visible_id, completed_at,
+                                 max_velocity_kmh, excess_kmh, fine_eur)
       VALUES (?, ?, ?, ?, ?, ?, ?)`),
         setTotal: db.prepare('UPDATE invoices SET total_eur = ? WHERE id = ?'),
         firstSend: db.prepare(`
-      UPDATE invoices SET status = 'sent', discord_id = ?, first_send_at = ?, last_send_at = ?,
-        due_at = ?, delivery = 'pending' WHERE id = ?`),
+      UPDATE invoices
+      SET status = 'sent', discord_id = ?, first_send_at = ?, last_send_at = ?, due_at = ?, delivery = 'pending'
+      WHERE id = ?`),
         retrySend: db.prepare(`
       UPDATE invoices SET discord_id = ?, last_send_at = ?, delivery = 'pending' WHERE id = ?`),
         setDelivery: db.prepare('UPDATE invoices SET delivery = ? WHERE id = ?'),
@@ -103,8 +109,9 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
         return invoice;
     }
 
-    function nextNumber(month, spedvUserId) {
-        const base = `HKC-${month}-${spedvUserId}`;
+    /** HKC-2026-10-123, Nachtrag HKC-2026-10-123-N1; nach Storno zusätzlich -2, -3 ... */
+    function nextNumber(month, spedvUserId, supplementNo = 0) {
+        const base = `HKC-${month}-${spedvUserId}${supplementNo > 0 ? `-N${supplementNo}` : ''}`;
         let number = base;
         let revision = 1;
         while (st.numberExists.get(number)) {
@@ -124,10 +131,20 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
         }
     }
 
+    function addLines(invoiceId, fines) {
+        for (const line of fines) {
+            st.insertLine.run(
+                invoiceId, line.task_id, line.visible_id, line.completed_at,
+                line.max_velocity_kmh, line.excess_kmh, line.fine_eur
+            );
+        }
+    }
+
     /**
      * Erstellt den Rechnungsentwurf eines Fahrers für einen abgeschlossenen Monat.
-     * Nur Aufträge mit Strafe über 0 EUR kommen hinein. Erwartete Fälle liefern ein Ergebnis
-     * mit "reason" statt eines Fehlers: no_fines, blocked, exists, exists_late_fines.
+     * Nur Aufträge mit Strafe über 0 EUR kommen hinein.
+     * Ist die Hauptrechnung schon versendet, landen neue Strafen in einer Nachtragsrechnung (-N1, -N2 ...).
+     * Erwartete Fälle liefern ein Ergebnis mit "reason" statt eines Fehlers: no_fines, blocked, exists.
      */
     function createDraft({ month, spedvUserId, actor, now = new Date() }) {
         const who = requireText(actor, 'Die ausführende Person', 1, 64);
@@ -136,72 +153,59 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
         assertMonthBillable(month, at);
 
         return transaction(() => {
-            const existing = st.findActive.get(month, user);
+            const main = st.findMain.get(month, user);
             const fines = st.openFines.all(month, user);
 
-            if (existing && fines.length === 0) {
-                return { created: false, reason: 'exists', invoice: loadInvoice(existing) };
+            if (main && fines.length === 0) {
+                return { created: false, reason: 'exists', invoice: loadInvoice(main) };
             }
 
             const blockers = st.blockers.all(month, user).map(row => row.task_id);
             if (blockers.length > 0) {
                 return { created: false, reason: 'blocked', blockers };
             }
-
-            if (!existing && fines.length === 0) {
+            if (!main && fines.length === 0) {
                 return { created: false, reason: 'no_fines' };
             }
 
             const addedTotal = fines.reduce((sum, line) => sum + line.fine_eur, 0);
+            const taskIds = fines.map(line => line.task_id);
 
-            if (existing) {
-                if (existing.status !== 'draft') {
-                    return {
-                        created: false,
-                        reason: 'exists_late_fines',
-                        invoice: loadInvoice(existing),
-                        lateTaskIds: fines.map(line => line.task_id),
-                    };
-                }
+            // Hauptrechnung schon versendet oder bezahlt: Nachtrag verwenden
+            const supplement = Boolean(main) && main.status !== 'draft';
+            const target = supplement ? st.findDraftSupplement.get(month, user) : main;
 
-                for (const line of fines) {
-                    st.insertLine.run(
-                        existing.id, line.task_id, line.visible_id, line.completed_at,
-                        line.max_velocity_kmh, line.excess_kmh, line.fine_eur
-                    );
-                }
-                st.setTotal.run(existing.total_eur + addedTotal, existing.id);
-                writeAudit(who, 'invoice_draft_updated', existing.number, {
-                    addedTasks: fines.map(line => line.task_id),
-                    totalEur: existing.total_eur + addedTotal,
+            if (target) {
+                addLines(target.id, fines);
+                const totalEur = target.total_eur + addedTotal;
+                st.setTotal.run(totalEur, target.id);
+                writeAudit(who, 'invoice_draft_updated', target.number, {
+                    addedTasks: taskIds,
+                    totalEur,
+                    supplementNo: target.supplement_no,
                 });
-
                 return {
                     created: false,
                     updated: true,
-                    invoice: loadInvoice(st.byNumber.get(existing.number)),
+                    supplement,
+                    invoice: loadInvoice(st.byNumber.get(target.number)),
                 };
             }
 
-            const number = nextNumber(month, user);
+            const supplementNo = supplement ? Number(st.nextSupplementNo.get(month, user).next) : 0;
+            const number = nextNumber(month, user, supplementNo);
             const info = st.insertInvoice.run(
-                number, month, user, fines[0].spedv_name ?? user, addedTotal, at.toISOString(), who
+                number, month, user, fines[0].spedv_name ?? user, addedTotal,
+                at.toISOString(), who, supplementNo
             );
-            const invoiceId = Number(info.lastInsertRowid);
-
-            for (const line of fines) {
-                st.insertLine.run(
-                    invoiceId, line.task_id, line.visible_id, line.completed_at,
-                    line.max_velocity_kmh, line.excess_kmh, line.fine_eur
-                );
-            }
-
-            writeAudit(who, 'invoice_draft_created', number, {
-                tasks: fines.map(line => line.task_id),
+            addLines(Number(info.lastInsertRowid), fines);
+            writeAudit(who, supplement ? 'invoice_supplement_created' : 'invoice_draft_created', number, {
+                tasks: taskIds,
                 totalEur: addedTotal,
+                supplementNo,
+                supplementOf: supplement ? main.number : null,
             });
-
-            return { created: true, invoice: loadInvoice(st.byNumber.get(number)) };
+            return { created: true, supplement, invoice: loadInvoice(st.byNumber.get(number)) };
         });
     }
 
@@ -209,18 +213,16 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
     function createDraftsForMonth({ month, actor, now = new Date() }) {
         const at = parseDate(now, 'Der Zeitpunkt');
         assertMonthBillable(month, at);
-
         const results = st.driversWithOpenFines.all(month).map(row => ({
             spedvUserId: row.spedv_user_id,
             ...createDraft({ month, spedvUserId: row.spedv_user_id, actor, now: at }),
         }));
-
         return {
             month,
-            created: results.filter(result => result.created).length,
+            created: results.filter(result => result.created && !result.supplement).length,
+            supplements: results.filter(result => result.created && result.supplement).length,
             updated: results.filter(result => result.updated).length,
             blocked: results.filter(result => result.reason === 'blocked').length,
-            lateFines: results.filter(result => result.reason === 'exists_late_fines').length,
             results,
         };
     }
@@ -253,7 +255,6 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
         return transaction(() => {
             const invoice = requireInvoice(number);
             const isRetry = invoice.status === 'sent' && invoice.delivery === 'failed';
-
             if (invoice.status !== 'draft' && !isRetry) {
                 if (invoice.status === 'paid') throw new StoreError('Die Rechnung ist bereits bezahlt.');
                 if (invoice.status === 'void') throw new StoreError('Die Rechnung ist storniert.');
@@ -261,21 +262,17 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
                     'Ein erneuter Versand ist nur nach eindeutig fehlgeschlagener Zustellung möglich.'
                 );
             }
-
             const iso = at.toISOString();
-
             if (invoice.status === 'draft') {
                 const due = new Date(at.getTime() + rules.paymentDays * DAY_MS).toISOString();
                 st.firstSend.run(target, iso, iso, due, invoice.id);
             } else {
                 st.retrySend.run(target, iso, invoice.id);
             }
-
             writeAudit(who, 'invoice_send_attempt', invoice.number, {
                 retry: isRetry,
                 discordId: target,
             });
-
             return loadInvoice(st.byNumber.get(invoice.number));
         });
     }
@@ -285,16 +282,13 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
         if (!DELIVERY_RESULTS.includes(delivery)) {
             throw new StoreError('Ungültiger Zustellstatus.');
         }
-
         return transaction(() => {
             const invoice = requireInvoice(number);
             if (invoice.status !== 'sent' || invoice.delivery !== 'pending') {
                 throw new StoreError('Für diese Rechnung gibt es keinen offenen Versandversuch.');
             }
-
             st.setDelivery.run(delivery, invoice.id);
             writeAudit(who, 'invoice_delivery_result', invoice.number, { delivery });
-
             return loadInvoice(st.byNumber.get(invoice.number));
         });
     }
@@ -303,7 +297,6 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
     function recordFallbackAttempt({ number, channelId, actor }) {
         const who = requireText(actor, 'Die ausführende Person', 1, 64);
         const channel = requireText(channelId, 'Die Kanal-ID', 1, 32);
-
         return transaction(() => {
             const invoice = requireInvoice(number);
             if (invoice.status !== 'sent' || invoice.delivery !== 'failed') {
@@ -312,10 +305,8 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
             if (invoice.fallback_status) {
                 throw new StoreError('Für diese Rechnung gab es schon einen öffentlichen Hinweis. Ein erneuter Post ist gesperrt.');
             }
-
             st.fallbackAttempt.run(channel, new Date().toISOString(), invoice.id);
             writeAudit(who, 'invoice_fallback_attempt', invoice.number, { channelId: channel });
-
             return loadInvoice(st.byNumber.get(invoice.number));
         });
     }
@@ -325,16 +316,13 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
         if (!['sent', 'unknown'].includes(status)) {
             throw new StoreError('Das Ergebnis muss "sent" oder "unknown" sein.');
         }
-
         return transaction(() => {
             const invoice = requireInvoice(number);
             if (invoice.fallback_status !== 'pending') {
                 throw new StoreError('Es gibt keinen offenen öffentlichen Hinweis.');
             }
-
             st.fallbackResult.run(status, messageId === null ? null : String(messageId), invoice.id);
             writeAudit(who, 'invoice_fallback_result', invoice.number, { status, messageId });
-
             return loadInvoice(st.byNumber.get(invoice.number));
         });
     }
@@ -352,7 +340,6 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
         if (!DELIVERY_RESULTS.includes(delivery)) {
             throw new StoreError('Ungültiger Zustellstatus.');
         }
-
         return transaction(() => {
             const invoice = requireInvoice(number);
             if (invoice.status !== 'sent') {
@@ -364,10 +351,8 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
             if (invoice.reminder_at) {
                 throw new StoreError('Die Erinnerung wurde bereits versendet.');
             }
-
             st.reminder.run(at.toISOString(), delivery, invoice.id);
             writeAudit(who, 'invoice_reminder', invoice.number, { delivery });
-
             return loadInvoice(st.byNumber.get(invoice.number));
         });
     }
@@ -376,20 +361,16 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
     function markPaid({ number, actor, now = new Date() }) {
         const who = requireText(actor, 'Die ausführende Person', 1, 64);
         const at = parseDate(now, 'Der Zeitpunkt');
-
         return transaction(() => {
             const invoice = requireInvoice(number);
-
             if (invoice.status === 'paid') {
                 return { updated: false, invoice: loadInvoice(invoice) };
             }
             if (invoice.status !== 'sent') {
                 throw new StoreError('Nur versendete Rechnungen können als bezahlt markiert werden.');
             }
-
             st.pay.run(at.toISOString(), who, invoice.id);
             writeAudit(who, 'invoice_paid', invoice.number, { totalEur: invoice.total_eur });
-
             return { updated: true, invoice: loadInvoice(st.byNumber.get(invoice.number)) };
         });
     }
@@ -399,7 +380,6 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
         const who = requireText(actor, 'Die ausführende Person', 1, 64);
         const why = requireText(reason, 'Die Begründung', 3, 500);
         const at = parseDate(now, 'Der Zeitpunkt');
-
         return transaction(() => {
             const invoice = requireInvoice(number);
             if (invoice.status === 'paid') {
@@ -408,7 +388,6 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
             if (invoice.status === 'void') {
                 throw new StoreError('Die Rechnung ist bereits storniert.');
             }
-
             st.voidInvoice.run(at.toISOString(), who, why, invoice.id);
             st.deactivateLines.run(invoice.id);
             writeAudit(who, 'invoice_voided', invoice.number, {
@@ -416,7 +395,6 @@ function createInvoiceApi({ db, transaction, writeAudit }) {
                 previousStatus: invoice.status,
                 totalEur: invoice.total_eur,
             });
-
             return loadInvoice(st.byNumber.get(invoice.number));
         });
     }

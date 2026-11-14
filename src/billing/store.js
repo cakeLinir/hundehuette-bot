@@ -10,6 +10,7 @@ const {
     requireMonth,
 } = require('./db');
 const { createInvoiceApi } = require('./invoices');
+const { createDepartureApi } = require('./departure');
 
 const DECISION_KINDS = ['waive', 'dismiss', 'assess'];
 const STORED_OUTCOMES = ['fine', 'clear', 'review'];
@@ -358,6 +359,7 @@ function openStore(options = {}) {
         return {
             ...createTaskApi(context),
             ...createInvoiceApi(context),
+            ...createDepartureApi(context),
             close: context.close,
         };
     } catch (error) {

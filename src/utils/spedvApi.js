@@ -338,6 +338,52 @@ function setLink(spedvName, discordId, spedvUserId) {
     );
 }
 
+/**
+ * Hebt die Verknüpfung eines Fahrers auf (zum Beispiel nach dem Austritt).
+ * Sucht zuerst über die SpedV-ID, sonst über den Namen (auch alte Einträge ohne ID).
+ * Gibt den entfernten Datensatz zurück oder null, wenn es keinen gab.
+ */
+function removeLink({ spedvUserId = null, spedvName = null } = {}) {
+    const targetId = spedvUserId === null || spedvUserId === undefined ? '' : String(spedvUserId).trim();
+    const targetName = norm(spedvName);
+    if (targetId && !/^\d+$/.test(targetId)) {
+        throw new TypeError('Ungültige SpedV-Nutzer-ID.');
+    }
+    if (!targetId && !targetName) {
+        throw new TypeError('SpedV-ID oder SpedV-Name ist erforderlich.');
+    }
+
+    const links = loadLinks();
+    const entries = getNormalizedEntries(links);
+    let match = null;
+
+    if (targetId) {
+        const byId = entries.filter(entry => entry.link.spedvUserId === targetId);
+        if (byId.length > 1) {
+            throw new Error(`SpedV-ID ${targetId} ist mehrfach in etsLinks.json eingetragen.`);
+        }
+        match = byId[0] ?? null;
+    }
+
+    if (!match && targetName) {
+        const byName = entries.find(entry => entry.key === targetName) ?? null;
+        if (byName && targetId && byName.link.spedvUserId && byName.link.spedvUserId !== targetId) {
+            throw new Error('Der SpedV-Name gehört laut Verknüpfung zu einer anderen SpedV-Nutzer-ID. Nichts wurde entfernt.');
+        }
+        match = byName;
+    }
+
+    if (!match) return null;
+
+    delete links[match.originalName];
+    writeFileAtomic.sync(
+        linksPath,
+        JSON.stringify(links, null, 2),
+        { encoding: 'utf8' }
+    );
+    return match.link;
+}
+
 function getSpedvNamesByDiscordId(discordId) {
     const targetId = String(discordId);
     const entries = getNormalizedEntries(loadLinks());
@@ -374,4 +420,5 @@ module.exports = {
     getSpedvLinksByDiscordId,
     getVerifiedSpedvLinksByDiscordId,
     setLink,
+    removeLink,
 };

@@ -129,14 +129,14 @@ test('Endzeit ohne Zeitzone: Prüffall statt Raten', async () => {
     assert.equal(result.reason, REASONS.MISSING_COMPLETION_TIME);
 });
 
-test('Abrechnungsbeginn: 31.10. 23:30 Berliner Zeit zählt nicht, 01.11. 00:30 schon', async () => {
-    const before = await run({ details: { endtime: '2026-10-31T22:30:00Z' } });
+test('Abrechnungsbeginn: 30.09. 23:30 Berliner Zeit zählt nicht, 01.10. 00:30 schon', async () => {
+    const before = await run({ details: { endtime: '2026-09-30T21:30:00Z' } });
     assert.equal(before.result.outcome, OUTCOMES.BEFORE_START);
     assert.equal(before.loads, 0);
 
-    const after = await run({ details: { endtime: '2026-10-31T23:30:00Z' } });
+    const after = await run({ details: { endtime: '2026-09-30T22:30:00Z' } });
     assert.equal(after.result.outcome, OUTCOMES.CLEAR);
-    assert.equal(after.result.billingMonth, '2026-11');
+    assert.equal(after.result.billingMonth, '2026-10');
 });
 
 test('Monatsgrenze nach Berliner Zeit', async () => {

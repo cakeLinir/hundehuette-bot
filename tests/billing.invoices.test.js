@@ -49,7 +49,7 @@ test('Der Monat muss abgeschlossen und abrechenbar sein', () => {
         StoreError
     );
     assert.throws(
-        () => store.createDraft({ month: '2026-10', spedvUserId: '169742', actor: '1', now: NOW }),
+        () => store.createDraft({ month: '2026-09', spedvUserId: '169742', actor: '1', now: NOW }),
         StoreError
     );
     assert.throws(() => store.createDraft({ month: 'x', spedvUserId: '1', actor: '1', now: NOW }), StoreError);

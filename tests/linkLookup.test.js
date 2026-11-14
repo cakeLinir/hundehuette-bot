@@ -23,7 +23,7 @@ test('Neues Format: Fallback über den Namen, ohne Beachtung der Schreibweise', 
 
 test('Altes Format (Text oder Zahl) funktioniert weiter', () => {
     assert.equal(findDiscordIdForDriver({ alt: ID_A }, { userName: 'Alt' }), ID_A);
-    assert.equal(findDiscordIdForDriver({ alt: Number('123456789012345678') }, { userName: 'alt' }), '123456789012345678');
+    assert.equal(findDiscordIdForDriver({ alt: 123456789012345680 }, { userName: 'alt' }), '123456789012345680');
 });
 
 test('Ergebnis ist nie "[object Object]", sondern eine ID oder null', () => {

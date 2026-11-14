@@ -287,7 +287,7 @@ test('klaeren: Prüffall ohne Verstoß, mit Hinweis im Buchhaltungs-Channel; Ein
         options: { auftrag: "#9", art: 'kein-verstoss', begruendung: 'Screenshot zeigt 91 km/h' },
     });
 
-    assert.match(textOf(last(interaction)), /#9 · kein Verstoß \(geklärt\)/);
+    assert.match(textOf(last(interaction)), /\*\*#9\*\* · kein Verstoß \(geklärt\)/);
     assert.equal(t.store.getEffective('9').effective_status, 'dismissed');
     assert.match(t.announced[0], new RegExp(`<@${STAFF}>`));
     assert.match(t.announced[0], /Screenshot zeigt 91 km\/h/);
@@ -415,7 +415,7 @@ test('senden monat: erst Vorschau, gesendet wird erst nach der Bestätigung', as
     const interaction = await run(t, { sub: 'senden', options: { monat: '2026-11' }, click: { choice: 'yes' } });
 
     const preview = textOf(interaction.calls.replies[0]);
-    assert.match(preview, /2 Rechnungen/);
+    assert.match(preview, /\*\*2\*\* Rechnungen/);
     assert.match(preview, /2\.600 €/);
     assert.equal(interaction.calls.replies[0].components.length, 1);
 

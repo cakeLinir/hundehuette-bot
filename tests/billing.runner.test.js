@@ -129,8 +129,8 @@ test('Sehr alte Aufträge werden übersprungen', async () => {
 test('Abschluss vor dem Abrechnungsbeginn: gezählt, aber nicht gespeichert', async () => {
     const store = openStore({ file: ':memory:' });
     const client = fakeClient({
-        tasks: [item(7, { startTime: '2026-10-31T20:00:00+01:00' })],
-        details: { 7: detailsFor({ endtime: '2026-10-31T22:00:00+01:00' }) },
+        tasks: [item(7, { startTime: '2026-09-30T20:00:00+02:00' })],
+        details: { 7: detailsFor({ endtime: '2026-09-30T22:00:00+02:00' }) },
     });
 
     const report = await run(client, store);

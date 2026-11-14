@@ -94,7 +94,7 @@ test('Nicht ausgewertete Aufträge lassen die Prüfung durchfallen', () => {
     store.close();
 });
 
-test('Offene Aufträge sind ein Hinweis, Oktoberaufträge zählen nicht', () => {
+test('Offene Aufträge sind ein Hinweis, Aufträge vor dem Abrechnungsbeginn zählen nicht', () => {
     const store = openStore({ file: ':memory:' });
     store.recordEvaluation(task({ taskId: '1' }));
 
@@ -102,7 +102,7 @@ test('Offene Aufträge sind ein Hinweis, Oktoberaufträge zählen nicht', () => 
         listed(1),
         listed(70, { state: 1 }),
         listed(71, { state: 0 }),
-        listed(72, { state: 5, startTime: '2026-10-20T10:00:00+02:00' }),
+        listed(72, { state: 5, startTime: '2026-09-20T10:00:00+02:00' }),
     ]);
 
     const pending = item(report, 'pending_tasks');

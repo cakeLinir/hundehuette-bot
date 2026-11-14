@@ -420,7 +420,7 @@ test('senden monat: erst Vorschau, gesendet wird erst nach der Bestätigung', as
     assert.equal(interaction.calls.replies[0].components.length, 1);
 
     assert.deepEqual(t.sent.sort(), ['HKC-2026-11-169742', 'HKC-2026-11-200']);
-    assert.match(textOf(last(interaction)), /Zugestellt: 2/);
+    assert.match(textOf(last(interaction)), /Zugestellt: \*\*2\*\*/);
     assert.match(t.announced[0], /zugestellt 2/);
     t.store.close();
 });
